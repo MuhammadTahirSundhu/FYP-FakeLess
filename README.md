@@ -12,7 +12,6 @@ gh repo clone MuhammadTahirSundhu/FYP-FakeLess
 ```
 Step 2
 Move to Code folder and run prepare_librispeech.py
-
 ``` 
 cd Code
 python prepare_librispeech.py --root /path/to/datasetsdownloads --output ../data/librispeech_prepared

@@ -3,7 +3,7 @@
 Step 1 
 Clone into your system using
 ```
-git clone https://www.github.com/MuhammadTahirSundhu/FYP=Fakeless.git
+git clone https://www.github.com/MuhammadTahirSundhu/FYP-Fakeless.git
 ```
 or use Github CLI (you would have to install it beforehand)
 

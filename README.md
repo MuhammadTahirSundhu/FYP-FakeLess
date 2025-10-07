@@ -24,4 +24,54 @@ Go to main/data/librispeech_prepared
 Check for the folder LibriSpeech and delete it
 
 
+Step 3 
+
+Before running defense_training.py 
+you will need to install the required modules 
+torch,torchaudio,speechbrain and some others
+
+locate where speechbrain is installed this may vary according to your system/install directory
+
+part 1
+
+\path\to\python\Lib\site-packages\speechbrain\lobes\models\ECAPA_TDNN.py
+
+find (around line 480)
+```
+x = layer(x, lengths=lengths)
+```
+and replace with 
+```
+try:
+  x = layer(x, lengths=lengths)
+except TypeError:
+  x = layer(x)
+```
+
+** DISCLAIMER dont edit if try expect block is already there
+
+
+
+
+part 2
+
+\path\to\python\Lib\site-packages\speechbrain\nnet\CNN.py
+
+find (around line 476)
+```
+x = F.pad(x, padding, mode=self.padding_mode)
+```
+
+replace with 
+```
+x = F.pad(x, padding, mode='constant', value=0)
+```
+** DISCLAIMER dont edit if syntax is same
+
+
+run defebse_training.py
+
+```
+python defense_training.py train_universal
+```
 

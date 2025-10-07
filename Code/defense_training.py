@@ -61,16 +61,35 @@ class ASVEmbedder:
             raise RuntimeError("SpeechBrain not installed.")
         
         self.device = device
-        self.model = SpeakerRecognition.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb",
-                                                     savedir="pretrained_models/spkrec_ecapa",
-                                                  run_opts={"device": device})
+        # Load ECAPA-TDNN model for speaker embedding
+        self.model = SpeakerRecognition.from_hparams(
+            source="speechbrain/spkrec-ecapa-voxceleb",
+            savedir="pretrained_models/spkrec_ecapa",
+            run_opts={"device": device}
+        )
 
     def extract(self, wav_np):
-        # expects numpy array, returns torch tensor embedding
-        wav_tensor = torch.tensor(wav_np).unsqueeze(0).unsqueeze(0).to(self.device)
-        emb = self.model.encode_batch(wav_tensor)  # [1,1,embdim]
-        return emb.squeeze().detach()  # CPU tensor
+        """
+        Accepts: 1D numpy array of audio samples (float32, 16kHz)
+        Returns: 1D torch embedding tensor (speaker embedding)
+        """
+        # Ensure float tensor and move to device
+        wav_tensor = torch.as_tensor(wav_np, dtype=torch.float32, device=self.device)
 
+        # Convert to mono if multiple channels
+        if wav_tensor.dim() == 2 and wav_tensor.shape[0] > 1:
+            wav_tensor = wav_tensor.mean(dim=0)
+
+        # Add batch dimension [1, time]
+        if wav_tensor.dim() == 1:
+            wav_tensor = wav_tensor.unsqueeze(0)
+
+        # Extract embedding using SpeechBrain ECAPA-TDNN
+        with torch.no_grad():
+            emb = self.model.encode_batch(wav_tensor)  # shape [1, emb_dim]
+
+        # Return as flattened tensor on correct device
+        return emb.squeeze(0).detach().to(self.device)
 # ----------------------------
 # Config (small; modify for your environment)
 # ----------------------------

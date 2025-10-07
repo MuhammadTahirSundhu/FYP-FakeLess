@@ -69,7 +69,7 @@ x = F.pad(x, padding, mode='constant', value=0)
 ** DISCLAIMER dont edit if syntax is same
 
 
-run defebse_training.py
+run defense_training.py
 
 ```
 python defense_training.py train_universal

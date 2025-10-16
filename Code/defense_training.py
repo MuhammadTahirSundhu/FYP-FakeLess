@@ -108,8 +108,8 @@ config = {
     "lambda_reg": 0.1,
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     "save_dir": "checkpoints_phase1",
-    "train_manifest": "Data/Librispeech_prepared/train-clean-100_manifest.txt",
-    "val_manifest": "Data/Librispeech_prepared/dev-clean_manifest.txt"
+    "train_manifest": "data/librispeech_prepared/train-clean-100_manifest.txt",
+    "val_manifest": "data/librispeech_prepared/dev-clean_manifest.txt"
 }
 os.makedirs(config["save_dir"], exist_ok=True)
 

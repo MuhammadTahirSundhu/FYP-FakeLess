@@ -8,6 +8,8 @@ Prepares LibriSpeech dataset for FYP Phase-1:
 
 Usage:
     python prepare_librispeech.py --root /path/to/raw_downloads --output data/librispeech_prepared
+Initially we are using on libreSpeech but we will make our custome dataset as well
+
 """
 
 import os

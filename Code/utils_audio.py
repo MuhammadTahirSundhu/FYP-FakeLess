@@ -10,6 +10,8 @@ Phase-1 role:
 Notes / Where to improve later:
  - Replace `mel_to_wave_griffinlim` with HiFi-GAN vocoder for demo-quality audio.
  - Keep parameters consistent across all scripts to avoid mismatches.
+
+The initial phase is ready and done for mid evaluation
 """
 
 import numpy as np

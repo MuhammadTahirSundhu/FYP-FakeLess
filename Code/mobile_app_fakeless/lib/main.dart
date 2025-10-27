@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'Audio_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -55,6 +56,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+  String message = "";
 
   void _incrementCounter() {
     setState(() {
@@ -67,6 +69,25 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void _uploadAudio() {
+    // Implement your audio upload logic here
+    setState(() {
+      message = "Audio uploaded successfully!";
+    });
+    print("Upload Audio button pressed");
+  }
+  void _recordAudio() {
+    // Implement your audio upload logic here
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AudioPage()),
+      );
+    setState(() {
+      message = "Audio recorded successfully!";
+    });
+    print("Record Audio button pressed");
+  }
+
   @override
   Widget build(BuildContext context) {
     // This method is rerun every time setState is called, for instance as done
@@ -75,6 +96,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // The Flutter framework has been optimized to make rerunning build methods
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
+    final screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       appBar: AppBar(
         // TRY THIS: Try changing the color here to a specific color (to
@@ -105,25 +127,55 @@ class _MyHomePageState extends State<MyHomePage> {
           // action in the IDE, or press "p" in the console), to see the
           // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 10, // space between elements
+          
           children: <Widget>[
-            FloatingActionButton(
-              onPressed: _incrementCounter,
-              foregroundColor: Color.fromARGB(255, 0, 0, 0),
-              backgroundColor: const Color.fromARGB(255, 87, 186, 236),
-              hoverColor: const Color.fromARGB(255, 162, 216, 245),
-              child: Text(  'Record Audio' ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center, // center horizontally
+              spacing: 0.05 * screenWidth, // space between buttons
+              children: [
+                FloatingActionButton.extended(
+                  onPressed: _uploadAudio,
+                  foregroundColor: Color.fromARGB(255, 0, 0, 0),
+                  backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+                  hoverColor: const Color.fromARGB(255, 162, 216, 245),
+                  splashColor: const Color.fromARGB(255, 3, 159, 243),
+                  elevation: 0,
+                  hoverElevation: 2,
+                  highlightElevation: 0,
+                  label: Text('Upload Audio'),
+                  heroTag: 'uploadButton',
+                ),
+
+                FloatingActionButton.extended(
+                  onPressed: _recordAudio,
+                  foregroundColor: Color.fromARGB(255, 0, 0, 0),
+                  backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+                  hoverColor: const Color.fromARGB(255, 162, 216, 245),
+                  splashColor: const Color.fromARGB(255, 3, 159, 243),
+                  elevation: 0,
+                  hoverElevation: 2,
+                  highlightElevation: 0,
+                  label: Text('Record Audio'),
+                  heroTag: 'recordButton',
+                ),
+              ],
             ),
-            const Text('You have pushed the button this many times:'),
             Text(
-              '$_counter',
+              message,
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            // Text(
+            //   '$_counter',
+            //   style: Theme.of(context).textTheme.headlineMedium,
+            // ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _incrementCounter,
         tooltip: 'Increment',
+        heroTag: 'incrementButton',
         child: const Icon(Icons.add),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );

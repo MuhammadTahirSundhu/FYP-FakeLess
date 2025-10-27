@@ -11,7 +11,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Fakeless',
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -28,9 +28,9 @@ class MyApp extends StatelessWidget {
         //
         // This works for code too, not just values: Most code changes can be
         // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 87, 186, 236)),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Fakeless Home Page'),
     );
   }
 }
@@ -83,7 +83,9 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         // Here we take the value from the MyHomePage object that was created by
         // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Center(
+          child: Text(widget.title)
+          ),
       ),
       body: Center(
         // Center is a layout widget. It takes a single child and positions it
@@ -104,6 +106,13 @@ class _MyHomePageState extends State<MyHomePage> {
           // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
+            FloatingActionButton(
+              onPressed: _incrementCounter,
+              foregroundColor: Color.fromARGB(255, 0, 0, 0),
+              backgroundColor: const Color.fromARGB(255, 87, 186, 236),
+              hoverColor: const Color.fromARGB(255, 162, 216, 245),
+              child: Text(  'Record Audio' ),
+            ),
             const Text('You have pushed the button this many times:'),
             Text(
               '$_counter',

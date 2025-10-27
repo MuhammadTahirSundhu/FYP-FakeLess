@@ -13,6 +13,9 @@ Usage:
 """
 
 import os
+os.environ["SPEECHBRAIN_CACHE_STRATEGY"] = "copy"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["SPEECHBRAIN_LOCAL_FILE_STRATEGY"] = "copy"
 import argparse
 import numpy as np
 import librosa
@@ -24,8 +27,8 @@ from defense_training import (
     mel_to_wave_griffinlim,
     PredictorNet,
     ASVEmbedder,
-    cosine_similarity,
-    CONFIG
+    cosine_similarity_torch as cosine_similarity,
+    config as CONFIG
 )
 
 def apply_universal_delta(wav, delta_np, config=CONFIG):

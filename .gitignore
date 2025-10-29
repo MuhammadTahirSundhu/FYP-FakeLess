@@ -15,6 +15,9 @@ checkpoints_phase1
 # Java class files
 *.class
 
+# venv
+venv/
+
 # Generated files
 bin/
 gen/

@@ -209,6 +209,7 @@ def train_universal_delta(manifest_path, asv_embedder=None):
 
         # save checkpoint delta
         np.save(os.path.join(config["save_dir"], f"universal_delta_epoch{epoch+1}.npy"), delta.detach().cpu().numpy())
+    np.save(os.path.join("./final_delta", f"universal_delta_epoch.npy"), delta.detach().cpu().numpy())
     print("Universal delta training finished.")
 
 # ----------------------------

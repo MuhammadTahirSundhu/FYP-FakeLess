@@ -97,8 +97,19 @@ class AudioPageState extends State<AudioPage> {
     }
   }
 
+  Widget _applyButton(){
+    return FloatingActionButton(onPressed: () {
+      // Apply the audio changes
+    },
+      heroTag: 'applyButton',
+      child: const Icon(Icons.cyclone_rounded)
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
     return Scaffold(
       appBar: AppBar(title: const Text("Audio Page")),
       body: Center(
@@ -109,10 +120,22 @@ class AudioPageState extends State<AudioPage> {
           children: <Widget>[
             recordingPath != null ? _playButton() : Text("No recording available"),
             _recordButton(),
-            Text(
-              'This is the audio recording page.',
-              style: TextStyle(fontSize: 24),
-            ),
+            
+            recordingPath != null ? 
+            SizedBox(
+              height: 0.6 * screenHeight,
+              width: 1 * screenWidth, 
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    _applyButton()
+                  ]
+                )
+              )
+            ) :
+            SizedBox.shrink(),
           ],
         )
       ),

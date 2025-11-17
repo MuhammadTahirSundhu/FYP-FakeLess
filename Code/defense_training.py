@@ -257,7 +257,7 @@ config = {
     "n_fft": N_FFT,
     "hop_length": HOP_LENGTH,
     "batch_size": 6,
-    "epochs": 2,
+    "epochs": 25,
     "universal_lr": 1e-2,
     "predictor_lr": 1e-4,
     "rl_lr": 3e-4,
@@ -580,6 +580,18 @@ def train_rl_agent(manifest_path, asv_embedder=None):
 # CLI
 # -------------------------
 if __name__ == "__main__":
+
+    if torch.cuda.is_available():
+        print("CUDA is available! GPUs found:")
+
+        # 2. Count the number of available GPUs
+        gpu_count = torch.cuda.device_count()
+        print(f"Number of GPUs: {gpu_count}")
+        print(config["device"])
+
+    else:
+        print("CUDA is NOT available. Check your PyTorch installation and driver setup.")
+
     import sys
     if len(sys.argv) < 2:
         print("Usage: python defense_training.py [train_universal|train_predictor|train_rl] [--advanced]")

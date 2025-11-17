@@ -16,7 +16,7 @@ h11
 hf-xet
 httpcore
 httpx
-huggingface-hub
+huggingface-hub==0.18.0 # Verrsion supported by SpeechBrain
 HyperPyYAML
 idna
 Jinja2
@@ -59,8 +59,8 @@ sympy
 tensorboard
 tensorboard-data-server
 threadpoolctl
-torch
-torchaudio
+torch>=2.1.0,<2.9  # PyTorch version compatible with SpeechBrain
+torchaudio>=2.1.0,<2.9  # Torchaudio version compatible with SpeechBrain
 tqdm
 typer-slim
 typing_extensions

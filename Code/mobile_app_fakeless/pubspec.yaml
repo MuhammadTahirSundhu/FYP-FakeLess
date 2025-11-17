@@ -42,6 +42,7 @@ dependencies:
   wav: ^1.5.0
   http: ^1.5.0
   serious_python: ^0.9.4
+  fft: ^2.0.0
 
 
 dev_dependencies:
@@ -68,8 +69,9 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-      - assets/delta.json
-      - assets/python/Code.zip
+      # - assets/delta.json
+      # - assets/python/Code.zip
+      - assets/models/delta_universal.tflite
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

@@ -1,6 +1,6 @@
 import 'dart:io';
 // import 'dart:math';
-// import 'dart:typed_data';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -9,7 +9,8 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 // import 'package:wav/wav.dart';
-import 'package:mobile_app_fakeless/utils/wav_helper.dart';
+// wav_helper currently not used by on-device flow; keep helpers in this file instead.
+import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:serious_python/serious_python.dart';
 // import 'package:http/http.dart' as http;
 // import 'package:flutter/services.dart';
@@ -114,11 +115,18 @@ class AudioPageState extends State<AudioPage> {
   Widget _applyButton() {
     return FloatingActionButton(
       onPressed: () async {
+        // NOTE: previous implementation used SeriousPython to call a Python
+        // script that applied the universal delta. That integration is
+        // commented out below. Replace this placeholder with an on-device
+        // TFLite invocation (or other platform-specific implementation).
+
         if (recordingPath == null) return;
 
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Applying perturbation...")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Applying perturbation locally (TODO)...")));
 
+        // --- previous SeriousPython implementation (commented out) ---
+        /*
         final protectedPath = await applyDeltaWithPython(recordingPath!);
 
         if (protectedPath != null && protectedPath.contains('.wav')) {
@@ -131,6 +139,10 @@ class AudioPageState extends State<AudioPage> {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text("Error: $protectedPath")));
         }
+        */
+
+        // TODO: implement applyDeltaWithTFLite(recordingPath) and set
+        // `this.protectedPath` once the local model inference is implemented.
       },
       heroTag: 'applyButton',
       child: const Icon(Icons.cyclone_rounded),
@@ -179,6 +191,88 @@ class AudioPageState extends State<AudioPage> {
       debugPrint("applyDeltaWithPython error: $e\n$st");
       return "ERROR: $e";
     }
+  }
+
+
+  /// Apply the universal delta using the on-device TFLite model.
+  ///
+  /// This is a best-effort scaffold that:
+  ///  - Loads the TFLite interpreter from app assets (`assets/models/delta_universal.tflite`).
+  ///  - Reads the WAV file (assumes PCM16 mono) into a normalized sample list.
+  ///  - (TODO) Computes the log-mel spectrogram from the waveform.
+  ///  - Runs the model to obtain a mel-domain delta.
+  ///  - (TODO) Reconstructs waveform from the perturbed mel (e.g., Griffin-Lim or vocoder).
+  ///
+  /// Right now this function runs the interpreter with a placeholder (zeros)
+  /// input so you can validate the interpreter load on-device. Replace the
+  /// mel-preprocessing and reconstruction TODOs with actual implementations.
+  Future<String?> applyDeltaWithTFLite(String inputFilePath) async {
+    try {
+      // 1) Load interpreter from assets (ensure model is listed in pubspec.yaml)
+      final interpreter = await Interpreter.fromAsset('models/delta_universal.tflite');
+
+      // 2) Inspect model input shape to create a compatible placeholder input
+      final inputTensors = interpreter.getInputTensors();
+      if (inputTensors.isEmpty) {
+        return 'ERROR: model has no inputs';
+      }
+      final shape = inputTensors.first.shape; // e.g. [1, n_mels, T]
+      final batch = shape[0];
+      final nMels = shape[1];
+      final tFrames = shape[2];
+
+      // 3) Read WAV file (PCM16 mono) into List<double> normalized samples
+      // Note: mel-spectrogram computation is not implemented here yet.
+      final _samples = await _readWavPcm16(inputFilePath);
+
+      // TODO: compute log-mel spectrogram from `samples` (shape [n_mels, T_var]).
+      // For now we create a zeros input matching the model shape so the
+      // interpreter can be exercised on-device.
+      final input = List.generate(batch, (_) => List.generate(nMels, (_) => List.filled(tFrames, 0.0)));
+
+      // 4) Prepare output buffer with same shape
+      final output = List.generate(batch, (_) => List.generate(nMels, (_) => List.filled(tFrames, 0.0)));
+
+      // 5) Run interpreter (synchronous)
+      interpreter.run(input, output);
+
+      // 6) TODO: apply `output` delta to mel spectrogram, reconstruct waveform.
+      // For now, just write a copy of the input file to demo_outputs to signal success.
+      final dir = await getApplicationDocumentsDirectory();
+      final outputDir = p.join(dir.path, "demo_outputs");
+      await Directory(outputDir).create(recursive: true);
+      final protPath = p.join(outputDir, "prot_universal.wav");
+      await File(inputFilePath).copy(protPath);
+
+      return protPath;
+    } catch (e, st) {
+      debugPrint('applyDeltaWithTFLite error: $e\n$st');
+      return 'ERROR: $e';
+    }
+  }
+
+  // Helper: read PCM16 mono WAV samples and return normalized [-1..1] doubles.
+  Future<List<double>> _readWavPcm16(String path) async {
+    final bytes = await File(path).readAsBytes();
+    // minimal WAV parsing: find 'data' chunk
+    int idx = 12; // skip RIFF header
+    while (idx + 8 < bytes.length) {
+      final chunkId = String.fromCharCodes(bytes.sublist(idx, idx + 4));
+      final chunkSize = bytes.buffer.asByteData().getUint32(idx + 4, Endian.little);
+      if (chunkId == 'data') {
+        final dataStart = idx + 8;
+        final dataBytes = bytes.sublist(dataStart, dataStart + chunkSize);
+        final out = <double>[];
+        final bd = ByteData.sublistView(Uint8List.fromList(dataBytes));
+        for (int i = 0; i + 1 < bd.lengthInBytes; i += 2) {
+          final s = bd.getInt16(i, Endian.little);
+          out.add(s / 32768.0);
+        }
+        return out;
+      }
+      idx += 8 + chunkSize;
+    }
+    return <double>[];
   }
 
 

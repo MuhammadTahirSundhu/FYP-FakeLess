@@ -99,7 +99,7 @@ AUG_BANDPASS = True
 # ============================================================================
 # Base directories
 PROJECT_ROOT = "."  # Current directory
-DATA_DIR = "data"
+DATA_DIR = "../data"
 
 # Your existing LibriSpeech data
 LIBRISPEECH_PREPARED_DIR = os.path.join(DATA_DIR, "librispeech_prepared")
@@ -160,8 +160,8 @@ ROBUSTNESS_TESTS = [
 # ============================================================================
 # VOCODER CONFIGURATION
 # ============================================================================
-USE_HIFIGAN = False
-HIFIGAN_CHECKPOINT = os.path.join(PRETRAINED_DIR, "hifigan", "universal_v1.pt")
+USE_HIFIGAN = True
+HIFIGAN_CHECKPOINT = os.path.join(PRETRAINED_DIR, "hifigan/hifi-gan", "generator_v1")
 GRIFFIN_LIM_ITERS = 32
 
 # ============================================================================

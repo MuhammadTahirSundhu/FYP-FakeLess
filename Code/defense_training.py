@@ -384,11 +384,14 @@ def train_universal_delta(manifest_path, asv_embedder=None, advanced=False):
             # Regularization
             reg = torch.sum(delta ** 2)
             
-            # PHASE 2: Psychoacoustic penalty
+            # PHASE 2: Psychoacoustic penalty (numerically stable)
             psycho_loss = torch.tensor(0.0, device=device)
             if advanced and config["use_psychoacoustic"]:
                 # Encourage low-frequency perturbations (more imperceptible)
-                freq_penalty = torch.sum(delta[:n_mels//2] ** 2) / torch.sum(delta ** 2)
+                # Add a small epsilon to denominator to avoid division-by-zero
+                denom = torch.sum(delta ** 2)
+                eps_denom = 1e-12
+                freq_penalty = torch.sum(delta[:n_mels//2] ** 2) / (denom + eps_denom)
                 psycho_loss = 1.0 - freq_penalty  # Penalize high-frequency energy
 
             total_loss = (config["lambda_attack"] * attack_loss + 
@@ -396,12 +399,31 @@ def train_universal_delta(manifest_path, asv_embedder=None, advanced=False):
                          config["lambda_reg"] * reg +
                          config["lambda_psycho"] * psycho_loss)
 
+            # If loss is non-finite, skip the update and sanitize `delta` to avoid NaNs
+            if not torch.isfinite(total_loss):
+                print("[WARN] Non-finite loss encountered; skipping update and sanitizing delta")
+                with torch.no_grad():
+                    # Replace NaN/inf in delta and clamp to allowed range
+                    delta.data = torch.nan_to_num(delta.data, nan=0.0, posinf=eps, neginf=-eps)
+                    delta.data = torch.clamp(delta.data, -eps, eps)
+                # Skip optimizer step for this batch
+                epoch_loss += float('nan') if torch.isnan(total_loss) else 0.0
+                pbar.set_postfix(loss="nan", attack=f"{attack_loss.item():.4f}", quality=f"{quality.item():.4f}")
+                continue
+
             opt.zero_grad()
             total_loss.backward()
+            # Clip gradients for stability (helps avoid exploding updates)
+            try:
+                torch.nn.utils.clip_grad_norm_([delta], max_norm=1.0)
+            except Exception:
+                pass
             opt.step()
-            
+
             with torch.no_grad():
                 delta.data = torch.clamp(delta.data, -eps, eps)
+                # sanitize again in case of numerical issues
+                delta.data = torch.nan_to_num(delta.data, nan=0.0, posinf=eps, neginf=-eps)
 
             epoch_loss += total_loss.item()
             pbar.set_postfix(loss=f"{total_loss.item():.4f}", 

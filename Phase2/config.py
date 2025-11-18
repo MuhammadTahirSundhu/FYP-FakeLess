@@ -167,7 +167,7 @@ GRIFFIN_LIM_ITERS = 32
 # ============================================================================
 # ASV CONFIGURATION
 # ============================================================================
-USE_ASV = False
+USE_ASV = True
 ASV_MODEL = "ecapa-tdnn"
 ASV_CHECKPOINT_DIR = os.path.join(PRETRAINED_DIR, "spkrec_ecapa")
 

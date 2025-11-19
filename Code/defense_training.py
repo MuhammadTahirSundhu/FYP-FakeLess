@@ -392,14 +392,14 @@ class UniversalDeltaTrainer:
             print(f"  Quality Loss: {metrics.get('quality_loss', 0):.6f}")
             print(f"  Reg Loss:     {metrics.get('reg_loss', 0):.4f}")
             
-            os.makedirs("checkpoints", exist_ok=True)
-            checkpoint_path = f"checkpoints/universal_delta_epoch{epoch}.npy"
+            os.makedirs("checkpoints_phase2", exist_ok=True)
+            checkpoint_path = f"checkpoints_phase2/universal_delta_epoch{epoch}.npy"
             np.save(checkpoint_path, self.delta.detach().cpu().numpy())
             print(f"  ✅ Saved: {checkpoint_path}")
             
             if metrics.get('attack_loss', float('inf')) < best_attack_loss:
                 best_attack_loss = metrics['attack_loss']
-                np.save("checkpoints/universal_delta_best.npy", 
+                np.save("checkpoints_phase2/universal_delta_best.npy", 
                        self.delta.detach().cpu().numpy())
                 print(f"  🌟 New best model!")
         
@@ -535,7 +535,7 @@ def main():
     protect_parser = subparsers.add_parser('protect')
     protect_parser.add_argument('--input', required=True)
     protect_parser.add_argument('--output', required=True)
-    protect_parser.add_argument('--delta', default='checkpoints/universal_delta_best.npy')
+    protect_parser.add_argument('--delta', default='checkpoints_phase2/universal_delta_best.npy')
     
     # Evaluate
     eval_parser = subparsers.add_parser('evaluate')

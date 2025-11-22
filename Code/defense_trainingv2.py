@@ -12,9 +12,9 @@ KEY IMPROVEMENTS:
 7. Gradient obfuscation against white-box attacks
 
 USAGE:
-    python advanced_defense.py train --manifest train.txt --epochs 30
-    python advanced_defense.py protect --input audio.wav --output protected.wav
-    python advanced_defense.py evaluate --original audio.wav --protected protected.wav
+    python defense_trainingv2.py train --manifest ..\data\librispeech_prepared\train-clean-100_manifest.txt --epochs 30
+    python defense_trainingv2.py protect --input audio.wav --output protected.wav
+    python defense_trainingv2.py evaluate --original audio.wav --protected protected.wav
 """
 
 import os
@@ -102,25 +102,55 @@ class HiFiGANVocoder:
     def mel_to_wav(self, mel_db):
         """Convert mel spectrogram to waveform"""
         try:
-            # Convert dB back to power
-            mel_power = librosa.db_to_power(mel_db)
-            
-            # Convert to tensor
-            mel_tensor = torch.from_numpy(mel_power).float().unsqueeze(0).to(self.device)
-            
-            # Generate waveform
+            # Accept either numpy array (dB) or torch tensor (dB) to avoid CPU roundtrips.
+            if isinstance(mel_db, torch.Tensor):
+                # If the torchaudio prototype pipeline is in use, the
+                # mel_transform and vocoder produced by the same pipeline
+                # are expected to be compatible. In that case, pass the
+                # tensor through unchanged (just ensure batch dim and
+                # device placement).
+                if getattr(self, 'use_torchaudio', False):
+                    mel_tensor = mel_db
+                    if mel_tensor.dim() == 2:
+                        mel_tensor = mel_tensor.unsqueeze(0).to(self.device)
+                    else:
+                        mel_tensor = mel_tensor.to(self.device)
+                else:
+                    # For other torch tensor inputs (not from torchaudio
+                    # pipeline) we conservatively handle negative values as
+                    # dB and convert to power.
+                    mel_tensor = mel_db
+                    if mel_tensor.min() < 0:
+                        mel_power = torch.pow(10.0, mel_tensor / 10.0)
+                    else:
+                        mel_power = mel_tensor
+
+                    if mel_power.dim() == 2:
+                        mel_tensor = mel_power.unsqueeze(0).to(self.device)
+                    else:
+                        mel_tensor = mel_power.to(self.device)
+
+            else:
+                # numpy path (legacy)
+                mel_power = librosa.db_to_power(mel_db)
+                mel_tensor = torch.from_numpy(mel_power).float().unsqueeze(0).to(self.device)
+
+            # Generate waveform on device
             with torch.no_grad():
-                if self.use_torchaudio:
-                    # Normalize mel for torchaudio
-                    mel_mean = mel_tensor.mean()
-                    mel_std = mel_tensor.std()
-                    if mel_std > 1e-5:
-                        mel_tensor = (mel_tensor - mel_mean) / (mel_std + 1e-5)
-                
+                # Do not apply global mean/std normalization for torchaudio HiFiGAN.
+                # Pass mel_tensor (power) directly to the vocoder to preserve expected scaling.
                 wav_tensor = self.hifigan(mel_tensor)
-                wav = wav_tensor.squeeze().cpu().numpy()
-            
-            return wav
+                # Remove all singleton dims then convert to numpy
+                wav_np = wav_tensor.squeeze().cpu().numpy()
+
+            # Ensure numpy float32 and correct orientation (frames, channels)
+            wav_np = np.asarray(wav_np, dtype=np.float32)
+            if wav_np.ndim == 2 and wav_np.shape[0] <= 2 and wav_np.shape[0] < wav_np.shape[1]:
+                wav_np = wav_np.T
+            if wav_np.ndim == 2 and wav_np.shape[1] == 1:
+                wav_np = wav_np.squeeze(1)
+
+            return wav_np
             
         except Exception as e:
             # Fallback to Griffin-Lim if HiFiGAN fails
@@ -156,7 +186,13 @@ class EnsembleASVEmbedder:
         
         # Model 3: Transformer style (self-attention)
         self.models.append(self._build_transformer_style())
-        
+        # Freeze model parameters (we don't train ASV models), but allow
+        # gradients to flow to inputs so losses backpropagate to `delta`.
+        for m in self.models:
+            m.eval()
+            for p in m.parameters():
+                p.requires_grad = False
+
         print(f"[INFO] ✅ Loaded {len(self.models)} ASV models in ensemble")
     
     def _build_ecapa_tdnn(self):
@@ -281,17 +317,38 @@ class EnsembleASVEmbedder:
         )
         mel_db = librosa.power_to_db(mel, ref=np.max)
         mel_tensor = torch.from_numpy(mel_db).float().unsqueeze(0).to(self.device)
-        
+
         # Ensemble embeddings
         embeddings = []
-        with torch.no_grad():
-            for model in self.models:
-                emb = model(mel_tensor)
-                embeddings.append(emb)
+        for model in self.models:
+            emb = model(mel_tensor)
+            embeddings.append(emb)
         
         # Average ensemble
         ensemble_emb = torch.stack(embeddings).mean(dim=0)
         return ensemble_emb.squeeze(0)
+
+    def extract_embedding_from_mel_tensor(self, mel_tensor: torch.Tensor):
+        """
+        Batch-friendly embedding extraction from a mel tensor.
+        Accepts `mel_tensor` of shape [B, n_mels, T] on the same device as models.
+        Returns a tensor of shape [B, embedding_dim].
+        """
+        if not isinstance(mel_tensor, torch.Tensor):
+            raise ValueError("mel_tensor must be a torch.Tensor")
+
+        # Ensure channel ordering is correct: models expect [B, n_mels, T]
+        mel_tensor = mel_tensor.to(self.device)
+
+
+        embeddings = []
+        for model in self.models:
+            emb = model(mel_tensor)
+            embeddings.append(emb)
+
+        # Stack across models and average
+        ensemble_emb = torch.stack(embeddings).mean(dim=0)
+        return ensemble_emb
 
 
 # ================================
@@ -309,15 +366,62 @@ class AdvancedAudioProcessor:
         
         # HiFiGAN vocoder
         self.vocoder = HiFiGANVocoder(device='cuda' if torch.cuda.is_available() else 'cpu')
+        # If torchaudio HiFiGAN exposed a mel_transform, keep a reference for mel extraction
+        self.mel_transform = getattr(self.vocoder, 'mel_transform', None)
+        self.vocoder_sample_rate = getattr(self.vocoder, 'sample_rate', self.sr)
     
     def load_audio(self, path):
         wav, sr = librosa.load(path, sr=self.sr)
         return wav, sr
     
     def save_audio(self, path, wav):
-        sf.write(path, wav, self.sr)
+        # Ensure numpy array, correct dtype and shape for soundfile
+        try:
+            wav_np = np.asarray(wav)
+        except Exception:
+            wav_np = np.array(wav)
+
+        # If channels-first (channels, frames) and channels is small, transpose
+        if wav_np.ndim == 2 and wav_np.shape[0] <= 2 and wav_np.shape[0] < wav_np.shape[1]:
+            wav_np = wav_np.T
+
+        # If still 2D with second dim==1, squeeze to 1D
+        if wav_np.ndim == 2 and wav_np.shape[1] == 1:
+            wav_np = wav_np.squeeze(1)
+
+        # Ensure float32
+        wav_np = wav_np.astype(np.float32)
+
+        sf.write(path, wav_np, self.sr)
     
     def wav_to_mel(self, wav):
+        # Prefer the vocoder's mel transform when available to ensure exact matching
+        if self.mel_transform is not None:
+            try:
+                # Convert to torch tensor: shape [1, T]
+                wav_t = torch.from_numpy(wav).float().unsqueeze(0)
+
+                # Resample if the vocoder expects a different sample rate
+                if self.vocoder_sample_rate != self.sr:
+                    try:
+                        import torchaudio
+                        wav_t = torchaudio.functional.resample(
+                            wav_t, orig_freq=self.sr, new_freq=self.vocoder_sample_rate
+                        )
+                    except Exception:
+                        # If torchaudio resample not available, fall back to librosa
+                        wav = librosa.resample(wav, orig_sr=self.sr, target_sr=self.vocoder_sample_rate)
+                        wav_t = torch.from_numpy(wav).float().unsqueeze(0)
+
+                # mel: likely returns [1, n_mels, T] with non-negative power/magnitude
+                mel_t = self.mel_transform(wav_t)
+                mel_t = mel_t.squeeze(0)
+                return mel_t
+            except Exception:
+                # Fall through to librosa fallback
+                pass
+
+        # Fallback (librosa): return dB-scaled mel (numpy)
         mel = librosa.feature.melspectrogram(
             y=wav, sr=self.sr, n_mels=self.n_mels,
             n_fft=self.n_fft, hop_length=self.hop_length, power=2.0
@@ -327,7 +431,28 @@ class AdvancedAudioProcessor:
     
     def mel_to_wav(self, mel_db):
         """Use HiFiGAN instead of Griffin-Lim"""
-        return self.vocoder.mel_to_wav(mel_db)
+        # Vocoder may produce audio at its native sample rate (e.g., 22050).
+        # Resample to the processor sample rate to keep durations consistent.
+        wav_out = self.vocoder.mel_to_wav(mel_db)
+
+        try:
+            # If vocoder sample rate differs from processor sample rate, resample
+            if getattr(self.vocoder, 'sample_rate', self.sr) != self.sr:
+                try:
+                    import torchaudio
+                    # torchaudio expects shape [1, T]
+                    wav_t = torch.from_numpy(wav_out).float().unsqueeze(0)
+                    wav_res = torchaudio.functional.resample(
+                        wav_t, orig_freq=getattr(self.vocoder, 'sample_rate', self.sr), new_freq=self.sr
+                    )
+                    wav_out = wav_res.squeeze(0).cpu().numpy()
+                except Exception:
+                    # Fallback to librosa resample
+                    wav_out = librosa.resample(wav_out, orig_sr=getattr(self.vocoder, 'sample_rate', self.sr), target_sr=self.sr)
+        except Exception:
+            pass
+
+        return wav_out
     
     def compute_perceptual_loss(self, wav1, wav2):
         """Compute perceptual audio loss (STFT-based)"""
@@ -457,62 +582,40 @@ class RobustUniversalDeltaTrainer:
     
     def compute_losses(self, mel_orig_batch, mel_prot_batch, wav_orig_list):
         """Advanced multi-objective loss"""
-        
-        attack_losses = []
-        
-        for i in range(len(wav_orig_list)):
-            try:
-                # Original embedding
-                with torch.no_grad():
-                    emb_orig = self.asv.extract_embedding(wav_orig_list[i])
-                
-                # Protected embedding
-                mel_prot_np = mel_prot_batch[i].cpu().detach().numpy()
-                wav_prot = self.audio_proc.mel_to_wav(mel_prot_np)
-                
-                # Ensure wav_prot is valid
-                if wav_prot is None or len(wav_prot) == 0:
-                    continue
-                    
-                emb_prot = self.asv.extract_embedding(wav_prot)
-                
-                # Attack loss (minimize similarity)
-                similarity = F.cosine_similarity(
-                    emb_orig.unsqueeze(0),
-                    emb_prot.unsqueeze(0)
-                )
-                attack_losses.append(similarity)
-                
-                # Purification resistance (only 20% of time to avoid slowdown)
-                if random.random() < 0.2:  # Reduced from 30% to 20%
-                    try:
-                        mel_purified = self.apply_purification_simulation(
-                            mel_prot_batch[i:i+1]
-                        )
-                        wav_purified = self.audio_proc.mel_to_wav(
-                            mel_purified[0].cpu().detach().numpy()
-                        )
-                        
-                        if wav_purified is not None and len(wav_purified) > 0:
-                            emb_purified = self.asv.extract_embedding(wav_purified)
-                            
-                            # Still want dissimilarity after purification
-                            purif_sim = F.cosine_similarity(
-                                emb_orig.unsqueeze(0),
-                                emb_purified.unsqueeze(0)
-                            )
-                            attack_losses.append(purif_sim * 0.5)  # Weight it less
-                    except Exception as e:
-                        # Skip purification for this sample if it fails
-                        pass
-                
-            except Exception as e:
-                continue
-        
-        if len(attack_losses) == 0:
+        # Vectorized/batched embedding computation to avoid per-sample CPU↔GPU roundtrips.
+        # `mel_orig_batch` and `mel_prot_batch` are expected to be torch tensors on device: [B, n_mels, T]
+        try:
+            B = mel_orig_batch.size(0)
+
+            with torch.no_grad():
+                emb_orig_batch = self.asv.extract_embedding_from_mel_tensor(mel_orig_batch)
+                emb_prot_batch = self.asv.extract_embedding_from_mel_tensor(mel_prot_batch)
+
+            # Cosine similarities per sample
+            sims = F.cosine_similarity(emb_orig_batch, emb_prot_batch, dim=1)
+
+            attack_losses_tensor = sims
+
+            # Purification resistance on a random subset (20%)
+            mask = (torch.rand(B, device=self.device) < 0.2)
+            if mask.any():
+                try:
+                    mel_purified = self.apply_purification_simulation(mel_prot_batch[mask])
+                    with torch.no_grad():
+                        emb_purified = self.asv.extract_embedding_from_mel_tensor(mel_purified)
+                    purif_sims = F.cosine_similarity(emb_orig_batch[mask], emb_purified, dim=1)
+                    attack_losses_tensor = torch.cat([attack_losses_tensor, purif_sims * 0.5])
+                except Exception:
+                    pass
+
+            if attack_losses_tensor.numel() == 0:
+                attack_loss = torch.tensor(0.5, device=self.device)
+            else:
+                attack_loss = attack_losses_tensor.mean()
+
+        except Exception as e:
+            # Fall back to a neutral attack loss on failure
             attack_loss = torch.tensor(0.5, device=self.device)
-        else:
-            attack_loss = torch.stack(attack_losses).mean()
         
         # Perceptual quality loss (STFT-based)
         mel_diff = mel_prot_batch - mel_orig_batch
@@ -553,7 +656,14 @@ class RobustUniversalDeltaTrainer:
                         continue
                     
                     mel = self.audio_proc.wav_to_mel(wav)
-                    mel_batch.append(mel)
+                    # Ensure mel is a numpy array for padding. If wav_to_mel
+                    # returned a torch.Tensor (vocoder mel), convert to numpy.
+                    if isinstance(mel, torch.Tensor):
+                        mel_np = mel.detach().cpu().numpy()
+                    else:
+                        mel_np = np.array(mel)
+
+                    mel_batch.append(mel_np)
                     wav_batch.append(wav)
                     
                 except:
@@ -562,15 +672,15 @@ class RobustUniversalDeltaTrainer:
             if len(mel_batch) < 2:
                 continue
             
-            # Pad to same length
+            # Pad to same length (mel_batch entries are numpy arrays)
             max_len = max(m.shape[1] for m in mel_batch)
             mel_padded = []
-            
+
             for m in mel_batch:
                 if m.shape[1] < max_len:
                     m = np.pad(m, ((0, 0), (0, max_len - m.shape[1])), mode='edge')
                 mel_padded.append(m)
-            
+
             mel_batch_tensor = torch.from_numpy(np.stack(mel_padded)).float().to(self.device)
             
             # Apply perturbation with augmentation
@@ -696,25 +806,152 @@ class AdvancedAudioProtector:
         self.delta = np.load(delta_path)
         print(f"[INFO] Loaded advanced protection from {delta_path}")
     
-    def protect_audio(self, input_path, output_path):
-        """Protect audio file"""
+    def protect_audio(self, input_path, output_path, scale=1.0):
+        """Protect audio file
+
+        Args:
+            input_path (str): path to input wav
+            output_path (str): path to write protected wav
+            scale (float): optional scale applied to the loaded delta (diagnostic)
+        """
         
         print(f"\n[INFO] Protecting: {input_path}")
         
         wav, sr = self.audio_proc.load_audio(input_path)
         print(f"  Duration: {len(wav)/sr:.2f}s")
         
+        # If diagnostic scale == 0.0, skip processing and return original audio
+        if float(scale) == 0.0:
+            print("[DEBUG] scale==0.0: writing original audio without protection (diagnostic)")
+            self.audio_proc.save_audio(output_path, wav)
+            print(f"  ✅ Saved original to: {output_path}")
+            return
+
         mel = self.audio_proc.wav_to_mel(wav)
-        
-        T = mel.shape[1]
-        delta_T = self.delta.shape[1]
-        num_tiles = int(np.ceil(T / delta_T))
-        delta_tiled = np.tile(self.delta, (1, num_tiles))[:, :T]
-        
-        mel_protected = mel + delta_tiled
-        
-        # Use HiFiGAN for reconstruction
-        wav_protected = self.audio_proc.mel_to_wav(mel_protected)
+        # Two possible mel types: torch.Tensor (from vocoder's mel_transform)
+        # or numpy dB (from librosa). Handle both.
+        if isinstance(mel, torch.Tensor):
+            # mel: [n_mels, T] tensor (power/magnitude expected)
+            T = mel.shape[1]
+            delta_T = self.delta.shape[1]
+            num_tiles = int(np.ceil(T / delta_T))
+
+            # Convert delta to tensor on same device
+            delta_torch = torch.from_numpy(self.delta).float().to(mel.device)
+            delta_tiled = delta_torch.repeat(1, num_tiles)[:, :T]
+
+            # delta statistics (diagnostic)
+            try:
+                print(f"[DEBUG] delta min={torch.min(delta_torch).item():.6f} max={torch.max(delta_torch).item():.6f} mean={torch.mean(delta_torch).item():.6f} std={torch.std(delta_torch).item():.6f}")
+            except Exception:
+                pass
+
+            # Apply optional scaling for diagnostics / sanity checks
+            if scale != 1.0:
+                try:
+                    delta_tiled = delta_tiled * float(scale)
+                    print(f"[DEBUG] applied scale={scale} to delta")
+                except Exception:
+                    pass
+
+            # NOTE: Historically `delta` was trained in the dB domain (mel dB).
+            # When `wav_to_mel` returns a torch mel from the vocoder pipeline it
+            # will be a power/magnitude spectrogram (non-negative). To apply a
+            # dB-domain delta to a power mel we must multiply by 10^(delta/10)
+            # rather than add. Apply multiplicatively here to preserve expected
+            # behavior when using torchaudio mel transforms.
+            try:
+                # Treat delta as dB offsets -> convert to multiplier
+                delta_db = delta_tiled
+                multiplier = torch.pow(10.0, delta_db / 10.0)
+                mel_protected = mel * multiplier
+            except Exception:
+                # Fallback: additive if something goes wrong
+                mel_protected = mel + delta_tiled
+
+            # Debugging: show mel stats
+            try:
+                print(f"[DEBUG] mel min={float(mel.min()):.6f} max={float(mel.max()):.6f} mean={float(mel.mean()):.6f}")
+                print(f"[DEBUG] mel_prot min={float(mel_protected.min()):.6f} max={float(mel_protected.max()):.6f} mean={float(mel_protected.mean()):.6f}")
+            except Exception:
+                pass
+
+            # Use HiFiGAN for reconstruction (mel_protected is a tensor)
+            wav_protected = self.audio_proc.mel_to_wav(mel_protected)
+
+            # Quick sanity check: if HiFiGAN output is very poor compared to
+            # the original (low SNR), try a librosa Griffin-Lim fallback and
+            # pick the better result. This helps when the mel transform's
+            # scaling doesn't match the vocoder expectations.
+            try:
+                # Compute provisional SNR (crop to shortest)
+                orig_len = len(wav)
+                prot_len = len(wav_protected)
+                minl = min(orig_len, prot_len)
+                if minl > 0:
+                    snr_try = self.audio_proc.compute_snr(wav[:minl], wav_protected[:minl])
+                else:
+                    snr_try = -999.0
+
+                # If SNR is very low, attempt Griffin-Lim fallback using librosa
+                if snr_try < 10.0:
+                    print(f"[WARN] HiFiGAN output SNR={snr_try:.2f} dB is low; trying librosa fallback")
+
+                    try:
+                        # Convert mel_protected (tensor) to numpy power or dB as needed
+                        mel_np = mel_protected.detach().cpu().numpy()
+
+                        # If values look like dB (negative), convert to power
+                        if mel_np.min() < 0:
+                            mel_power = librosa.db_to_power(mel_np)
+                        else:
+                            mel_power = mel_np
+
+                        wav_gl = librosa.feature.inverse.mel_to_audio(
+                            mel_power, sr=self.audio_proc.sr,
+                            n_fft=self.audio_proc.n_fft,
+                            hop_length=self.audio_proc.hop_length, n_iter=64
+                        )
+
+                        minl2 = min(len(wav), len(wav_gl))
+                        snr_gl = self.audio_proc.compute_snr(wav[:minl2], wav_gl[:minl2])
+                        print(f"[WARN] Griffin-Lim fallback SNR={snr_gl:.2f} dB")
+
+                        # Choose the better reconstruction
+                        if snr_gl > snr_try:
+                            print("[INFO] Using Griffin-Lim fallback (better SNR)")
+                            wav_protected = wav_gl
+
+                    except Exception as e:
+                        print(f"[WARN] Griffin-Lim fallback failed: {e}")
+            except Exception:
+                pass
+
+        else:
+            # numpy path (legacy)
+            T = mel.shape[1]
+            delta_T = self.delta.shape[1]
+            num_tiles = int(np.ceil(T / delta_T))
+            delta_tiled = np.tile(self.delta, (1, num_tiles))[:, :T]
+
+            # delta statistics (diagnostic)
+            try:
+                print(f"[DEBUG] delta min={np.min(self.delta):.6f} max={np.max(self.delta):.6f} mean={np.mean(self.delta):.6f} std={np.std(self.delta):.6f}")
+            except Exception:
+                pass
+
+            # Apply optional scaling for diagnostics / sanity checks
+            if scale != 1.0:
+                try:
+                    delta_tiled = delta_tiled * float(scale)
+                    print(f"[DEBUG] applied scale={scale} to delta")
+                except Exception:
+                    pass
+
+            mel_protected = mel + delta_tiled
+
+            # Use HiFiGAN for reconstruction
+            wav_protected = self.audio_proc.mel_to_wav(mel_protected)
         
         min_len = min(len(wav), len(wav_protected))
         wav = wav[:min_len]
@@ -867,6 +1104,8 @@ def main():
     protect_parser.add_argument('--output', required=True, help='Output protected file')
     protect_parser.add_argument('--delta', default='checkpoints_advanced/universal_delta_best.npy',
                                help='Path to trained delta')
+    protect_parser.add_argument('--scale', type=float, default=1.0,
+                               help='Scale factor to apply to the delta when protecting (diagnostic)')
     
     # Evaluate command
     eval_parser = subparsers.add_parser('evaluate', help='Evaluate protection')
@@ -912,7 +1151,7 @@ def main():
     
     elif args.command == 'protect':
         protector = AdvancedAudioProtector(args.delta, config)
-        protector.protect_audio(args.input, args.output)
+        protector.protect_audio(args.input, args.output, scale=args.scale)
     
     elif args.command == 'evaluate':
         evaluator = AdvancedProtectionEvaluator(config)

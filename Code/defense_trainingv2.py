@@ -13,8 +13,8 @@ KEY IMPROVEMENTS:
 
 USAGE:
     python defense_trainingv2.py train --manifest ..\data\librispeech_prepared\train-clean-100_manifest.txt --epochs 30
-    python defense_trainingv2.py protect --input audio.wav --output protected.wav
-    python defense_trainingv2.py evaluate --original audio.wav --protected protected.wav
+    python defense_trainingv2.py protect --input test.wav --output protected.wav
+    python defense_trainingv2.py evaluate --original test.wav --protected protected.wav
 """
 
 import os
@@ -587,9 +587,12 @@ class RobustUniversalDeltaTrainer:
         try:
             B = mel_orig_batch.size(0)
 
-            with torch.no_grad():
-                emb_orig_batch = self.asv.extract_embedding_from_mel_tensor(mel_orig_batch)
-                emb_prot_batch = self.asv.extract_embedding_from_mel_tensor(mel_prot_batch)
+            # Compute embeddings WITHOUT torch.no_grad() so gradients from the
+            # attack loss can flow back to the mel inputs and ultimately to
+            # the learnable `self.delta`. ASV model parameters are frozen
+            # (requires_grad=False) so only inputs receive gradients.
+            emb_orig_batch = self.asv.extract_embedding_from_mel_tensor(mel_orig_batch)
+            emb_prot_batch = self.asv.extract_embedding_from_mel_tensor(mel_prot_batch)
 
             # Cosine similarities per sample
             sims = F.cosine_similarity(emb_orig_batch, emb_prot_batch, dim=1)
@@ -621,8 +624,8 @@ class RobustUniversalDeltaTrainer:
         mel_diff = mel_prot_batch - mel_orig_batch
         quality_loss = torch.mean(mel_diff ** 2)
         
-        # Sparsity regularization
-        reg_loss = torch.sum(torch.abs(self.delta))
+        # Sparsity regularization (use mean to keep scale consistent across sizes)
+        reg_loss = torch.mean(torch.abs(self.delta))
         
         return attack_loss, quality_loss, reg_loss
     
@@ -876,7 +879,94 @@ class AdvancedAudioProtector:
             except Exception:
                 pass
 
-            # Use HiFiGAN for reconstruction (mel_protected is a tensor)
+            # MEL comparison and visualization (save numpy arrays and image);
+            # compute cosine similarity between original and protected mel.
+            try:
+                def _mel_to_db_np(x):
+                    if isinstance(x, torch.Tensor):
+                        arr = x.detach().cpu().numpy()
+                    else:
+                        arr = np.array(x)
+                    # If negative values present, assume dB already
+                    if arr.min() < 0:
+                        return arr
+                    try:
+                        return librosa.power_to_db(arr, ref=np.max)
+                    except Exception:
+                        return 10.0 * np.log10(np.maximum(arr, 1e-10))
+
+                try:
+                    orig_db = _mel_to_db_np(mel)
+                    prot_db = _mel_to_db_np(mel_protected)
+                    min_T = min(orig_db.shape[1], prot_db.shape[1]) if (orig_db.ndim == 2 and prot_db.ndim == 2) else None
+                    if min_T is not None:
+                        orig_db_crop = orig_db[:, :min_T]
+                        prot_db_crop = prot_db[:, :min_T]
+                    else:
+                        orig_db_crop = orig_db
+                        prot_db_crop = prot_db
+
+                    diff_db = prot_db_crop - orig_db_crop
+
+                    # Cosine similarity on flattened dB vectors
+                    try:
+                        v1 = torch.from_numpy(orig_db_crop.ravel()).float()
+                        v2 = torch.from_numpy(prot_db_crop.ravel()).float()
+                        cos_sim = float(F.cosine_similarity(v1.unsqueeze(0), v2.unsqueeze(0), dim=1).item())
+                    except Exception:
+                        cos_sim = None
+
+                    base = os.path.splitext(output_path)[0]
+                    np.save(base + '_mel_orig.npy', orig_db_crop)
+                    np.save(base + '_mel_prot.npy', prot_db_crop)
+                    np.save(base + '_mel_diff.npy', diff_db)
+                    try:
+                        if cos_sim is not None:
+                            print(f"[DEBUG] Mel cosine similarity: {cos_sim:.6f}")
+                        else:
+                            print("[DEBUG] Mel cosine similarity: unavailable")
+                    except Exception:
+                        pass
+
+                    try:
+                        import matplotlib.pyplot as plt
+                        fig, axs = plt.subplots(1, 3, figsize=(15, 4))
+                        axs[0].imshow(orig_db_crop, aspect='auto', origin='lower', cmap='magma')
+                        axs[0].set_title('orig mel (dB)')
+                        axs[1].imshow(prot_db_crop, aspect='auto', origin='lower', cmap='magma')
+                        axs[1].set_title('protected mel (dB)')
+                        im = axs[2].imshow(diff_db, aspect='auto', origin='lower', cmap='RdBu')
+                        axs[2].set_title('diff (dB)')
+                        fig.colorbar(im, ax=axs[2], fraction=0.046, pad=0.04)
+                        if cos_sim is not None:
+                            fig.suptitle(f'Mel comparison — cosine={cos_sim:.4f}')
+                        else:
+                            fig.suptitle('Mel comparison')
+                        plt.tight_layout()
+                        img_path = base + '_mel_compare.png'
+                        fig.savefig(img_path)
+                        plt.close(fig)
+
+                        # Clean up mel debug artifacts to avoid cluttering workspace
+                        try:
+                            candidates = [base + '_mel_orig.npy', base + '_mel_prot.npy', base + '_mel_diff.npy']
+                            for p in candidates:
+                                try:
+                                    if os.path.exists(p):
+                                        os.remove(p)
+                                except Exception:
+                                    pass
+                            print(f"[DEBUG] Removed mel debug files for: {base}")
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
             wav_protected = self.audio_proc.mel_to_wav(mel_protected)
 
             # Quick sanity check: if HiFiGAN output is very poor compared to
@@ -950,7 +1040,78 @@ class AdvancedAudioProtector:
 
             mel_protected = mel + delta_tiled
 
-            # Use HiFiGAN for reconstruction
+            # MEL comparison and visualization (numpy path)
+            try:
+                def _mel_to_db_np(x):
+                    if isinstance(x, torch.Tensor):
+                        arr = x.detach().cpu().numpy()
+                    else:
+                        arr = np.array(x)
+                    if arr.min() < 0:
+                        return arr
+                    try:
+                        return librosa.power_to_db(arr, ref=np.max)
+                    except Exception:
+                        return 10.0 * np.log10(np.maximum(arr, 1e-10))
+
+                try:
+                    orig_db = _mel_to_db_np(mel)
+                    prot_db = _mel_to_db_np(mel_protected)
+                    min_T = min(orig_db.shape[1], prot_db.shape[1]) if (orig_db.ndim == 2 and prot_db.ndim == 2) else None
+                    if min_T is not None:
+                        orig_db_crop = orig_db[:, :min_T]
+                        prot_db_crop = prot_db[:, :min_T]
+                    else:
+                        orig_db_crop = orig_db
+                        prot_db_crop = prot_db
+
+                    diff_db = prot_db_crop - orig_db_crop
+
+                    try:
+                        v1 = torch.from_numpy(orig_db_crop.ravel()).float()
+                        v2 = torch.from_numpy(prot_db_crop.ravel()).float()
+                        cos_sim = float(F.cosine_similarity(v1.unsqueeze(0), v2.unsqueeze(0), dim=1).item())
+                    except Exception:
+                        cos_sim = None
+
+                    base = os.path.splitext(output_path)[0]
+                    np.save(base + '_mel_orig.npy', orig_db_crop)
+                    np.save(base + '_mel_prot.npy', prot_db_crop)
+                    np.save(base + '_mel_diff.npy', diff_db)
+                    try:
+                        if cos_sim is not None:
+                            print(f"[DEBUG] Mel cosine similarity: {cos_sim:.6f}")
+                        else:
+                            print("[DEBUG] Mel cosine similarity: unavailable")
+                    except Exception:
+                        pass
+
+                    try:
+                        import matplotlib.pyplot as plt
+                        fig, axs = plt.subplots(1, 3, figsize=(15, 4))
+                        axs[0].imshow(orig_db_crop, aspect='auto', origin='lower', cmap='magma')
+                        axs[0].set_title('orig mel (dB)')
+                        axs[1].imshow(prot_db_crop, aspect='auto', origin='lower', cmap='magma')
+                        axs[1].set_title('protected mel (dB)')
+                        im = axs[2].imshow(diff_db, aspect='auto', origin='lower', cmap='RdBu')
+                        axs[2].set_title('diff (dB)')
+                        fig.colorbar(im, ax=axs[2], fraction=0.046, pad=0.04)
+                        if cos_sim is not None:
+                            fig.suptitle(f'Mel comparison — cosine={cos_sim:.4f}')
+                        else:
+                            fig.suptitle('Mel comparison')
+                        plt.tight_layout()
+                        img_path = base + '_mel_compare.png'
+                        fig.savefig(img_path)
+                        plt.close(fig)
+                    except Exception:
+                        pass
+
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
             wav_protected = self.audio_proc.mel_to_wav(mel_protected)
         
         min_len = min(len(wav), len(wav_protected))
@@ -1130,8 +1291,8 @@ def main():
             'batch_size': args.batch_size,
             'lr': args.lr,
             'epsilon': args.epsilon,
-            'lambda_attack': 1.0,
-            'lambda_quality': 15.0,  # Higher weight for quality
+            'lambda_attack': 10.0,
+            'lambda_quality': 5.0,  # Higher weight for quality
             'lambda_reg': 0.05       # Lower reg for more flexibility
         })
         

@@ -11,6 +11,13 @@ KEY IMPROVEMENTS:
 6. Perceptual loss for imperceptibility
 7. Gradient obfuscation against white-box attacks
 
+path to other checkpoints:
+    checkpoints_advanced
+    checkpoints_phase1
+    checkpoints_phase2
+    -------IGNORE-------
+    checkpoints_smoke
+
 USAGE:
     python defense_trainingv2.py train --manifest ..\data\librispeech_prepared\train-clean-100_manifest.txt --epochs 30
     python defense_trainingv2.py protect --input test.wav --output protected.wav

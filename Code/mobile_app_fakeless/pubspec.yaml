@@ -42,7 +42,7 @@ dependencies:
   wav: ^1.5.0
   http: ^1.5.0
   serious_python: ^0.9.4
-  fft: ^2.0.0
+  # fft: ^2.0.0
 
 
 dev_dependencies:

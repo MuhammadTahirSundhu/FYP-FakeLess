@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app_fakeless/splashscreen.dart';
 import 'audio_page.dart';
 
 void main() {
@@ -31,7 +32,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 87, 186, 236)),
       ),
-      home: const MyHomePage(title: 'Fakeless Home Page'),
+      home: const SplashScreen(),
     );
   }
 }

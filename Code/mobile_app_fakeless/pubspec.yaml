@@ -48,10 +48,12 @@ dependencies:
   # fft: ^2.0.0
 
 flutter_native_splash:
-  color: "#039FF3"
+  color: "#57baec"
   android_12:
     # background color
-    color: "#039FF3"
+    color: "#57baec"
+    image: assets/images/Splash.png
+    icon_background_color: "#57baec"
 
 
 

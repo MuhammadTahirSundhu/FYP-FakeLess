@@ -12,7 +12,7 @@ class SplashScreen extends StatelessWidget {
         splash: LottieBuilder.asset("assets/animation/phone-voice.json"),
         nextScreen: const MyHomePage(title: 'Fakeless Home Page'),
         splashIconSize: 400,
-        backgroundColor: const Color.fromARGB(255, 3, 159, 243),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       );
   }
 }

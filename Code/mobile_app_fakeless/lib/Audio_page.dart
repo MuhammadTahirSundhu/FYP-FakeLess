@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-// import 'package:mobile_app_fakeless/utils/delta_loader.dart';
 import 'package:record/record.dart';
+import 'package:http/http.dart' as http;
+// import 'package:mobile_app_fakeless/utils/delta_loader.dart';
 // import 'package:serious_python/serious_python.dart';
 // import 'package:wav/wav.dart';
 // wav_helper currently not used by on-device flow; keep helpers in this file instead.
 // import 'package:tflite_flutter/tflite_flutter.dart';
-// import 'package:http/http.dart' as http;
 // import 'package:flutter/services.dart';
 
 class AudioPage extends StatefulWidget {
@@ -254,12 +254,48 @@ class AudioPageState extends State<AudioPage> {
   Widget _applyButtonCloud() {
     return FloatingActionButton(
       onPressed: () async {
-        // Placeholder for cloud-based perturbation application
+        if (recordingPath == null) return;
+
+        final uri = Uri.parse('https://aldo-cushiony-drily.ngrok-free.dev/protect'); // Replace with your server IP
+        final request = http.MultipartRequest('POST', uri);
+        request.files.add(await http.MultipartFile.fromPath('audio', recordingPath!));
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Applying perturbation via cloud (TODO)..."),
-          ),
+          const SnackBar(content: Text("Uploading to cloud for protection...")),
         );
+
+        try {
+          final streamedResponse = await request.send();
+          final statusCode = streamedResponse.statusCode;
+          final responseBytes = await streamedResponse.stream.toBytes();
+          if (statusCode == 200) {
+            // Save the received bytes as a .wav file
+            final dir = await getApplicationDocumentsDirectory();
+            final protPath = p.join(dir.path, "protected.wav");
+            final file = File(protPath);
+            await file.writeAsBytes(responseBytes);
+            setState(() {
+              protectedPath = protPath;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Protected audio ready!")),
+            );
+          } else {
+            // Try to decode error message if present
+            String errorMsg = "Error: $statusCode";
+            try {
+              final errorStr = String.fromCharCodes(responseBytes);
+              if (errorStr.isNotEmpty) errorMsg = errorStr;
+            } catch (_) {}
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Error uplaoding file")),
+            );
+          }
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error: $e")),
+          );
+        }
       },
       heroTag: 'applyButtonCloud',
       child: const Icon(Icons.cloud_circle),

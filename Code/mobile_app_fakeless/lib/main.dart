@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'Audio_page.dart';
+import 'package:mobile_app_fakeless/splashscreen.dart';
+import 'audio_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -31,7 +32,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 87, 186, 236)),
       ),
-      home: const MyHomePage(title: 'Fakeless Home Page'),
+      home: const SplashScreen(),
     );
   }
 }
@@ -55,19 +56,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
   String message = "";
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
 
   void _uploadAudio() {
     // Implement your audio upload logic here
@@ -85,7 +74,6 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       message = "Audio recorded successfully!";
     });
-    print("Record Audio button pressed");
   }
 
   @override
@@ -172,12 +160,12 @@ class _MyHomePageState extends State<MyHomePage> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        heroTag: 'incrementButton',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: _incrementCounter,
+      //   tooltip: 'Increment',
+      //   heroTag: 'incrementButton',
+      //   child: const Icon(Icons.add),
+      // ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }

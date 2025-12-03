@@ -434,7 +434,8 @@ class AdvancedAudioProcessor:
             n_fft=self.n_fft, hop_length=self.hop_length, power=2.0
         )
         mel_db = librosa.power_to_db(mel, ref=np.max)
-        return mel_db
+        mel_tensor = torch.from_numpy(mel_db).float()
+        return mel_tensor
     
     def mel_to_wav(self, mel_db):
         """Use HiFiGAN instead of Griffin-Lim"""
@@ -840,6 +841,7 @@ class AdvancedAudioProtector:
         mel = self.audio_proc.wav_to_mel(wav)
         # Two possible mel types: torch.Tensor (from vocoder's mel_transform)
         # or numpy dB (from librosa). Handle both.
+        print(f"  Mel shape: {mel.shape}")
         if isinstance(mel, torch.Tensor):
             # mel: [n_mels, T] tensor (power/magnitude expected)
             T = mel.shape[1]
@@ -880,11 +882,12 @@ class AdvancedAudioProtector:
                 mel_protected = mel + delta_tiled
 
             # Debugging: show mel stats
+            print("[DEBUG] Mel statistics:")
             try:
                 print(f"[DEBUG] mel min={float(mel.min()):.6f} max={float(mel.max()):.6f} mean={float(mel.mean()):.6f}")
                 print(f"[DEBUG] mel_prot min={float(mel_protected.min()):.6f} max={float(mel_protected.max()):.6f} mean={float(mel_protected.mean()):.6f}")
-            except Exception:
-                pass
+            except Exception as e:
+                print("[Exception]:", e)
 
             # MEL comparison and visualization (save numpy arrays and image);
             # compute cosine similarity between original and protected mel.
@@ -929,7 +932,7 @@ class AdvancedAudioProtector:
                     np.save(base + '_mel_diff.npy', diff_db)
                     try:
                         if cos_sim is not None:
-                            print(f"[DEBUG] Mel cosine similarity: {cos_sim:.6f}")
+                            print(f"[DEBUG] Mel cosine similaritys: {cos_sim:.6f}")
                         else:
                             print("[DEBUG] Mel cosine similarity: unavailable")
                     except Exception:

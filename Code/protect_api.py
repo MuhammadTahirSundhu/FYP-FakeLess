@@ -11,7 +11,7 @@ import tempfile
 import traceback
 
 # Import the AdvancedAudioProtector from defense_trainingv2.py
-from defense_trainingv2 import AdvancedAudioProtector
+from defense_trainingv2 import AdvancedAudioProtector, AdvancedAudioProcessor
 
 # Configuration (adjust as needed)
 DELTA_PATH = 'checkpoints_advanced/universal_delta_best.npy'
@@ -61,11 +61,14 @@ def protect_audio():
         input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(input_path)
 
+        input_path = 'Cloud_files_test/audio.wav' #os.path.abspath(input_path)
+
         output_filename = f"protected_{filename}"
         output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
 
         import time; time.sleep(0.1)
         protector.protect_audio(input_path, output_path, 1)
+        import time; time.sleep(1)
 
         # Read the protected file into memory
         with open(output_path, 'rb') as f:

@@ -8,12 +8,28 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:http/http.dart' as http;
+import 'package:encrypt/encrypt.dart' as encrypt;
 // import 'package:mobile_app_fakeless/utils/delta_loader.dart';
 // import 'package:serious_python/serious_python.dart';
 // import 'package:wav/wav.dart';
 // wav_helper currently not used by on-device flow; keep helpers in this file instead.
 // import 'package:tflite_flutter/tflite_flutter.dart';
 // import 'package:flutter/services.dart';
+
+final key = encrypt.Key.fromUtf8('0123456789abcdefghijklmnopqrstuv'); // 32 chars for AES-256
+final iv = encrypt.IV.fromLength(16); // 16 bytes IV for AES
+
+Uint8List encryptFile(Uint8List fileBytes) {
+  final encrypter = encrypt.Encrypter(encrypt.AES(key));
+  final encrypted = encrypter.encryptBytes(fileBytes, iv: iv);
+  return encrypted.bytes;
+}
+
+Uint8List decryptFile(Uint8List encryptedBytes) {
+  final encrypter = encrypt.Encrypter(encrypt.AES(key));
+  final decrypted = encrypter.decryptBytes(encrypt.Encrypted(encryptedBytes), iv: iv);
+  return Uint8List.fromList(decrypted);
+}
 
 class AudioPage extends StatefulWidget {
   const AudioPage({super.key});

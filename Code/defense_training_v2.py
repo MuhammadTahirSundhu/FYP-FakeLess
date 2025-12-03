@@ -24,7 +24,7 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from utils_audio import load_wav, wav_to_mel, mel_to_wave_griffinlim, tile_delta_to_length, SR, N_MELS, N_FFT, HOP_LENGTH,mel_to_wave_hifigan,hifigan_vocoder
+from utils_audio_v2 import load_wav, wav_to_mel, mel_to_wave_griffinlim, tile_delta_to_length, SR, N_MELS, N_FFT, HOP_LENGTH,mel_to_wave_hifigan,hifigan_vocoder
 # Predictor small network (Conv1D)
 os.environ["SPEECHBRAIN_LOCAL_COPY"] = "true"
 class PredictorNet(nn.Module):

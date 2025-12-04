@@ -1,6 +1,7 @@
 import 'dart:io';
 // import 'dart:math';
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -16,18 +17,23 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 // import 'package:tflite_flutter/tflite_flutter.dart';
 // import 'package:flutter/services.dart';
 
-final key = encrypt.Key.fromUtf8('0123456789abcdefghijklmnopqrstuv'); // 32 chars for AES-256
-final iv = encrypt.IV.fromLength(16); // 16 bytes IV for AES
+final _plainKeyString = '0123456789abcdefghijklmnopqrstuv'; // 32 bytes
 
-Uint8List encryptFile(Uint8List fileBytes) {
-  final encrypter = encrypt.Encrypter(encrypt.AES(key));
-  final encrypted = encrypter.encryptBytes(fileBytes, iv: iv);
-  return encrypted.bytes;
+// Derive the base64 (urlsafe) key string to match Python's
+final _b64KeyString = base64Url.encode(utf8.encode(_plainKeyString));
+final _fernetKey = encrypt.Key.fromBase64(_b64KeyString);
+final _fernet = encrypt.Fernet(_fernetKey);
+final encrypter = encrypt.Encrypter(_fernet);
+
+// Helpers that operate on base64 tokens for transport (ASCII-safe):
+String encryptFileToBase64(Uint8List fileBytes) {
+  final encrypted = encrypter.encryptBytes(fileBytes);
+  return encrypted.base64; // token as base64 string
 }
 
-Uint8List decryptFile(Uint8List encryptedBytes) {
-  final encrypter = encrypt.Encrypter(encrypt.AES(key));
-  final decrypted = encrypter.decryptBytes(encrypt.Encrypted(encryptedBytes), iv: iv);
+Uint8List decryptBase64ToBytes(String base64Token) {
+  final encrypted = encrypt.Encrypted.fromBase64(base64Token);
+  final decrypted = encrypter.decryptBytes(encrypted);
   return Uint8List.fromList(decrypted);
 }
 
@@ -272,12 +278,27 @@ class AudioPageState extends State<AudioPage> {
       onPressed: () async {
         if (recordingPath == null) return;
 
+        final bytes = File(recordingPath!).readAsBytesSync();
+        final encBase64 = encryptFileToBase64(bytes);
+        final dec = decryptBase64ToBytes(encBase64);
+
+        debugPrint(bytes.length.toString());
+        debugPrint('Cloud encrypt/decrypt test:');
+        debugPrint(dec.length.toString());
+
         final uri = Uri.parse('https://aldo-cushiony-drily.ngrok-free.dev/protect'); // Replace with your server IP
         final request = http.MultipartRequest('POST', uri);
-        request.files.add(await http.MultipartFile.fromPath('audio', recordingPath!));
+
+        // Encrypt the audio file before upload and write base64 token to file
+        final fileBytes = await File(recordingPath!).readAsBytes();
+        final encryptedBase64 = encryptFileToBase64(fileBytes);
+        final tempDir = await getTemporaryDirectory();
+        final encryptedPath = p.join(tempDir.path, 'encrypted_audio.b64');
+        await File(encryptedPath).writeAsString(encryptedBase64);
+        request.files.add(await http.MultipartFile.fromPath('audio', encryptedPath));
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Uploading to cloud for protection...")),
+          const SnackBar(content: Text("Uploading encrypted audio to cloud for protection...")),
         );
 
         try {
@@ -285,11 +306,13 @@ class AudioPageState extends State<AudioPage> {
           final statusCode = streamedResponse.statusCode;
           final responseBytes = await streamedResponse.stream.toBytes();
           if (statusCode == 200) {
-            // Save the received bytes as a .wav file
+            // Response contains a base64 Fernet token (ASCII) — decode and decrypt
+            final responseBase64 = utf8.decode(responseBytes);
+            final decryptedBytes = decryptBase64ToBytes(responseBase64);
             final dir = await getApplicationDocumentsDirectory();
             final protPath = p.join(dir.path, "protected.wav");
             final file = File(protPath);
-            await file.writeAsBytes(responseBytes);
+            await file.writeAsBytes(decryptedBytes);
             setState(() {
               protectedPath = protPath;
             });
@@ -304,7 +327,7 @@ class AudioPageState extends State<AudioPage> {
               if (errorStr.isNotEmpty) errorMsg = errorStr;
             } catch (_) {}
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Error uplaoding file")),
+              SnackBar(content: Text("Error uploading file: $errorMsg")),
             );
           }
         } catch (e) {

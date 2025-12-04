@@ -8,9 +8,22 @@ import torch
 from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import tempfile
+import base64
+import base64
 import traceback
+from cryptography.fernet import Fernet
+from Crypto.Util.Padding import pad, unpad
 
 # Import the AdvancedAudioProtector from defense_trainingv2.py
+# Force a non-interactive matplotlib backend to avoid tkinter/TkAgg GUI
+# issues when Flask worker threads create figures. Use 'Agg' for file-based
+# rendering (no GUI / no tkinter). Must set before any pyplot import.
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+except Exception:
+    pass
+
 from defense_trainingv2 import AdvancedAudioProtector, AdvancedAudioProcessor
 
 # Configuration (adjust as needed)
@@ -19,6 +32,12 @@ SAMPLE_RATE = 16000
 UPLOAD_FOLDER = os.path.join(os.getcwd(), 'Cloud_files_test')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {'wav'}
+
+key = b'0123456789abcdefghijklmnopqrstuv' # 32 chars for AES-256 or fernet
+# iv = b'\x00' * 16  # 16 bytes IV for AES
+
+b64_key = base64.urlsafe_b64encode(key)
+fernet = Fernet(b64_key)
 
 # Flask app
 app = Flask(__name__)
@@ -40,6 +59,20 @@ protector = AdvancedAudioProtector(DELTA_PATH, config)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def encrypt_file(data):
+    # cipher = AES.new(key, AES.MODE_CBC, iv)
+    # padded_data = pad(data, AES.block_size)
+    # encrypted = cipher.encrypt(padded_data)
+    # return encrypted
+    return fernet.encrypt(data)
+
+def decrypt_file(data):
+    # cipher = AES.new(key, AES.MODE_CBC, iv)
+    # decrypted_padded = cipher.decrypt(data)
+    # decrypted = unpad(decrypted_padded, AES.block_size)
+    # return decrypted
+    return fernet.decrypt(data)
+
 @app.route('/protect', methods=['POST'])
 def protect_audio():
     """
@@ -51,19 +84,36 @@ def protect_audio():
     file = request.files['audio']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type. Only .wav allowed.'}), 400
+    # if not allowed_file(file.filename):
+    #     return jsonify({'error': f'Invalid file type. Only .wav allowed.{file.filename}'}), 400
 
     input_path = None
     output_path = None
     try:
         filename = secure_filename(file.filename)
-        input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(input_path)
 
-        input_path = 'Cloud_files_test/audio.wav' #os.path.abspath(input_path)
+        # Read encrypted bytes directly (binary). Do NOT decode as UTF-8.
+        enc_bytes = file.read()  # bytes (ASCII base64 token written by client)
+        # Debug info: length and a short hex preview
+        print(f"Received encrypted bytes length: {len(enc_bytes)}")
+        print(f"First 8 bytes (hex): {enc_bytes[:8].hex()}")
 
-        output_filename = f"protected_{filename}"
+        # Decrypt bytes using Fernet (expects bytes token)
+        raw_bytes = decrypt_file(enc_bytes)
+
+        # Ensure the decrypted input file has a .wav extension so soundfile can infer format
+        base_name = os.path.splitext(filename)[0]
+        input_filename = f"{base_name}.wav"
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], input_filename)
+        with open(input_path, 'wb') as f:
+            f.write(raw_bytes)
+
+        # if len(enc_bytes) % AES.block_size != 0:
+        #     print("Warning: Encrypted data length is not a multiple of AES block size!")
+        input_path = os.path.abspath(input_path)
+
+
+        output_filename = f"protected_{input_filename}"
         output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
 
         import time; time.sleep(0.1)
@@ -73,6 +123,7 @@ def protect_audio():
         # Read the protected file into memory
         with open(output_path, 'rb') as f:
             audio_bytes = f.read()
+        enc_audio_bytes = encrypt_file(audio_bytes)
 
 
         # Only keep the protected audio and comparison image; delete the uploaded input file
@@ -81,7 +132,7 @@ def protect_audio():
 
         # Send the file as a response
         return (
-            audio_bytes,
+            enc_audio_bytes,
             200,
             {
                 'Content-Type': 'audio/wav',

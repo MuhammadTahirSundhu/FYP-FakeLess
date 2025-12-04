@@ -13,6 +13,8 @@ matplotlib>=3.8.0
 # Custom / external modules
 speechbrain>=0.5.14
 pycryptodome
+cryptography
+flask
 
 # Local utilities (make sure these exist in your project)
 # utils_audio.py

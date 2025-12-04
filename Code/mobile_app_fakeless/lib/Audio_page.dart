@@ -48,7 +48,8 @@ class AudioPageState extends State<AudioPage> {
   final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool isRecording = false;
-  bool isPlaying = false;
+  bool isPlayingOriginal = false;
+  bool isPlayingProtected = false;
   String? recordingPath;
   String? protectedPath;
 
@@ -207,7 +208,7 @@ class AudioPageState extends State<AudioPage> {
 
   @override
   void dispose() {
-    if (isPlaying) {
+    if (isPlayingOriginal) {
       _audioPlayer.stop();
     }
     if (isRecording) {
@@ -227,7 +228,8 @@ class AudioPageState extends State<AudioPage> {
       if (state.processingState == ProcessingState.completed) {
         if (!mounted) return;
         setState(() {
-          isPlaying = false;
+          isPlayingOriginal = false;
+          isPlayingProtected = false;
         });
       }
     });
@@ -342,13 +344,13 @@ class AudioPageState extends State<AudioPage> {
   }
 
   Widget _playButton() {
-    if (isPlaying) {
+    if (isPlayingOriginal) {
       return FloatingActionButton(
         onPressed: () async {
-          await _audioPlayer.stop();
-          if (!mounted) return;
+          await _audioPlayer.pause();
+          if (!mounted) return; // ensure widget is loaded
           setState(() {
-            isPlaying = false;
+            isPlayingOriginal = false;
           });
         },
         heroTag: 'stopButton',
@@ -360,9 +362,10 @@ class AudioPageState extends State<AudioPage> {
           if (recordingPath != null) {
             await _audioPlayer.setFilePath(recordingPath!);
             _audioPlayer.play();
-            if (!mounted) return;
+            if (!mounted) return; // ensure widget is loaded
             setState(() {
-              isPlaying = true;
+              isPlayingOriginal = true;
+              isPlayingProtected = false;
             });
           }
         },
@@ -373,13 +376,13 @@ class AudioPageState extends State<AudioPage> {
   }
 
   Widget _playProtectedButton() {
-    if (isPlaying) {
+    if (isPlayingProtected) {
       return FloatingActionButton(
         onPressed: () async {
-          await _audioPlayer.stop();
-          if (!mounted) return;
+          await _audioPlayer.pause();
+          if (!mounted) return; // ensure widget is loaded
           setState(() {
-            isPlaying = false;
+            isPlayingProtected = false;
           });
         },
         heroTag: 'stopProtectedButton',
@@ -391,9 +394,10 @@ class AudioPageState extends State<AudioPage> {
           if (protectedPath != null) {
             await _audioPlayer.setFilePath(protectedPath!);
             _audioPlayer.play();
-            if (!mounted) return;
+            if (!mounted) return; // ensure widget is loaded
             setState(() {
-              isPlaying = true;
+              isPlayingProtected = true;
+              isPlayingOriginal = false;
             });
           }
         },

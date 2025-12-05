@@ -46,12 +46,20 @@ class AudioPage extends StatefulWidget {
 
 class AudioPageState extends State<AudioPage> {
   final AudioRecorder _audioRecorder = AudioRecorder();
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  final AudioPlayer _audioPlayerreco = AudioPlayer();
+  final AudioPlayer _audioPlayerproc = AudioPlayer();
   bool isRecording = false;
-  bool isPlayingOriginal = false;
-  bool isPlayingProtected = false;
+  // bool isPlayingOriginal = false;
+  // bool isPlayingProtected = false;
   String? recordingPath;
   String? protectedPath;
+  bool audioPlayerrecoPath = false;
+  bool audioPlayerprocPath = false;
+
+  Duration positionreco = Duration.zero;
+  Duration durationreco = Duration.zero;
+  Duration positionproc = Duration.zero;
+  Duration durationproc = Duration.zero;
 
   // Future<String?> applyDeltaWithPython(String inputFilePath) async {
   //   try {
@@ -177,7 +185,24 @@ class AudioPageState extends State<AudioPage> {
           spacing: 10,
           children: <Widget>[
             recordingPath != null
-                ? _playButton()
+                ? SizedBox(
+                 child: Center(
+                   child: Row(
+                    children: <Widget>[
+                      _playButton(),
+                      Slider(
+                        min: 0.0,
+                        max: durationreco.inSeconds.toDouble(),
+                        value: positionreco.inSeconds.toDouble(),
+                        onChanged: (double value){
+                          _audioPlayerreco.seek(Duration(seconds: value.toInt()));
+                        },
+                      ),
+                      Text(formatDuration(positionreco) + "/" + formatDuration(durationreco)),
+                    ]
+                   )
+                 )
+                )
                 : Text("No recording available"),
             _recordButton(),
             recordingPath != null
@@ -191,7 +216,22 @@ class AudioPageState extends State<AudioPage> {
                         spacing: 30,
                         children: <Widget>[
                           protectedPath != null
-                              ? _playProtectedButton()
+                              ? SizedBox( 
+                                child: Row(
+                                  children: <Widget>[
+                                  _playProtectedButton(),
+                                  Slider(
+                                    min: 0.0,
+                                    max: durationproc.inSeconds.toDouble(),
+                                    value: positionproc.inSeconds.toDouble(),
+                                    onChanged: ( double value){
+                                      _audioPlayerproc.seek(Duration(seconds: value.toInt()));
+                                    },
+                                    ),
+                                  Text(formatDuration(positionproc) + "/" + formatDuration(durationproc)),
+                                ],
+                                )
+                              )
                               : Text("No protected audio available"),
                           _applyButton(),
                           _applyButtonCloud(),
@@ -206,33 +246,88 @@ class AudioPageState extends State<AudioPage> {
     );
   }
 
-  @override
-  void dispose() {
-    if (isPlayingOriginal) {
-      _audioPlayer.stop();
-    }
-    if (isRecording) {
-      _audioRecorder.stop();
-    }
-    _audioPlayer.dispose();
-    _audioRecorder.dispose();
-    super.dispose();
+  // @override
+  // void dispose() {
+  //   if (isPlayingOriginal) {
+  //     _audioPlayer.stop();
+  //   }
+  //   if (isRecording) {
+  //     _audioRecorder.stop();
+  //   }
+  //   _audioPlayer.dispose();
+  //   _audioRecorder.dispose();
+  //   super.dispose();
+  // }
+
+  
+
+  String formatDuration(Duration d){
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(d.inMinutes.remainder(60));
+    final seconds = twoDigits(d.inSeconds.remainder(60));
+    return '$minutes:$seconds';
   }
+
 
   @override
   void initState() {
     super.initState();
 
-    // Listen for when the audio finishes playing
-    _audioPlayer.playerStateStream.listen((state) {
+    //functionality for original audio player
+    _audioPlayerreco.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
         if (!mounted) return;
         setState(() {
-          isPlayingOriginal = false;
-          isPlayingProtected = false;
+          positionreco = Duration.zero;
         });
+        _audioPlayerreco.stop();
+        _audioPlayerreco.seek(positionreco);
       }
     });
+
+    _audioPlayerreco.positionStream.listen((pos) {
+      if (!mounted) return;
+      setState(() {
+        positionreco = pos;
+      });
+    });
+
+    _audioPlayerreco.durationStream.listen((dur) {
+      if (!mounted) return;
+      setState(() {
+        durationreco = dur!;
+      });
+    });
+
+    //functionality for protected audio player
+    _audioPlayerproc.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        if (!mounted) return;
+        setState(() {
+          positionproc = Duration.zero;
+        });
+        _audioPlayerproc.stop();
+        _audioPlayerproc.seek(positionproc);
+      }
+    });
+
+    _audioPlayerproc.positionStream.listen((pos) {
+      if (!mounted) return;
+      setState(() {
+        positionproc = pos;
+      });
+    });
+
+    _audioPlayerproc.durationStream.listen((dur) {
+      if (!mounted) return;
+      setState(() {
+        durationproc = dur!;
+      });
+    });
+  }
+
+  void handleSeek(double value, AudioPlayer audioPlayer){
+    audioPlayer.seek(Duration(seconds: value.toInt()));
   }
 
   Widget _applyButton() {
@@ -344,14 +439,11 @@ class AudioPageState extends State<AudioPage> {
   }
 
   Widget _playButton() {
-    if (isPlayingOriginal) {
+    if (_audioPlayerreco.playing) {
       return FloatingActionButton(
         onPressed: () async {
-          await _audioPlayer.pause();
+          await _audioPlayerreco.pause();
           if (!mounted) return; // ensure widget is loaded
-          setState(() {
-            isPlayingOriginal = false;
-          });
         },
         heroTag: 'stopButton',
         child: const Icon(Icons.stop),
@@ -360,12 +452,13 @@ class AudioPageState extends State<AudioPage> {
       return FloatingActionButton(
         onPressed: () async {
           if (recordingPath != null) {
-            await _audioPlayer.setFilePath(recordingPath!);
-            _audioPlayer.play();
+            if (audioPlayerrecoPath != true){
+              await _audioPlayerreco.setFilePath(recordingPath!);
+            }
+            _audioPlayerreco.play();
             if (!mounted) return; // ensure widget is loaded
             setState(() {
-              isPlayingOriginal = true;
-              isPlayingProtected = false;
+              audioPlayerrecoPath = true;
             });
           }
         },
@@ -376,14 +469,11 @@ class AudioPageState extends State<AudioPage> {
   }
 
   Widget _playProtectedButton() {
-    if (isPlayingProtected) {
+    if (_audioPlayerproc.playing) {
       return FloatingActionButton(
         onPressed: () async {
-          await _audioPlayer.pause();
+          await _audioPlayerproc.pause();
           if (!mounted) return; // ensure widget is loaded
-          setState(() {
-            isPlayingProtected = false;
-          });
         },
         heroTag: 'stopProtectedButton',
         child: const Icon(Icons.stop),
@@ -392,12 +482,13 @@ class AudioPageState extends State<AudioPage> {
       return FloatingActionButton(
         onPressed: () async {
           if (protectedPath != null) {
-            await _audioPlayer.setFilePath(protectedPath!);
-            _audioPlayer.play();
+            if (audioPlayerprocPath != true){
+              await _audioPlayerproc.setFilePath(protectedPath!);
+            }
+            _audioPlayerproc.play();
             if (!mounted) return; // ensure widget is loaded
             setState(() {
-              isPlayingProtected = true;
-              isPlayingOriginal = false;
+              audioPlayerprocPath = true;
             });
           }
         },
@@ -466,6 +557,7 @@ class AudioPageState extends State<AudioPage> {
             setState(() {
               isRecording = true;
               recordingPath = null;
+              protectedPath = null;
             });
           }
         }

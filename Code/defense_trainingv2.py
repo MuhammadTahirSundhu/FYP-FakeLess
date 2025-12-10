@@ -1142,6 +1142,8 @@ class AdvancedAudioProtector:
 # ================================
 # ADVANCED EVALUATOR
 # ================================
+from pystoi import stoi
+from pesq import pesq
 
 class AdvancedProtectionEvaluator:
     """Comprehensive evaluation"""
@@ -1191,7 +1193,11 @@ class AdvancedProtectionEvaluator:
         print("\n🎵 Audio Quality Metrics:")
         snr = self.audio_proc.compute_snr(wav_orig, wav_prot)
         perceptual_loss = self.audio_proc.compute_perceptual_loss(wav_orig, wav_prot)
-        
+        # PESQ (narrowband)
+        pesq_score = pesq(self.config['sr'], wav_orig, wav_prot, 'nb')
+
+        # STOI
+        stoi_score = stoi(wav_orig, wav_prot, self.config['sr'], extended=False)
         print(f"  SNR: {snr:.2f} dB")
         if snr > 35:
             print("    → Imperceptible difference")
@@ -1201,7 +1207,8 @@ class AdvancedProtectionEvaluator:
             print("    → Noticeable differences")
         
         print(f"  Perceptual Loss: {perceptual_loss:.6f}")
-        
+        print(f"  PESQ: {pesq_score:.4f}  (higher = better)")
+        print(f"  STOI: {stoi_score:.4f}  (higher = better speech intelligibility)")
         # 3. Purification Resistance Test
         print("\n🛡️  Purification Resistance:")
         self._test_purification_resistance(wav_orig, wav_prot)

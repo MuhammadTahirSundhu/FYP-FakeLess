@@ -39,9 +39,8 @@ from typing import List, Tuple, Dict
 import random
 warnings.filterwarnings('ignore')
 
-# ================================
-# HIFIGAN VOCODER (SUPERIOR QUALITY)
-# ================================
+
+# HIFIGAN VOCODER class , replaces Griffin-Lam for better quality
 
 class HiFiGANVocoder:
     """
@@ -54,7 +53,7 @@ class HiFiGANVocoder:
         self.device = device
         
         try:
-            # Try torchaudio implementation first
+            
             from torchaudio.prototype.pipelines import HIFIGAN_VOCODER_V3_LJSPEECH
             self.hifigan = HIFIGAN_VOCODER_V3_LJSPEECH.get_vocoder().to(device)
             self.mel_transform = HIFIGAN_VOCODER_V3_LJSPEECH.get_mel_transform()
@@ -63,7 +62,7 @@ class HiFiGANVocoder:
             print("[INFO] ✅ Using torchaudio HiFiGAN")
             
         except:
-            # Fallback: Custom HiFiGAN implementation
+            
             print("[INFO] Torchaudio unavailable, using custom HiFiGAN")
             self.hifigan = self._build_custom_hifigan().to(device)
             self.use_torchaudio = False
@@ -72,7 +71,7 @@ class HiFiGANVocoder:
         self.hifigan.eval()
     
     def _build_custom_hifigan(self):
-        """Build lightweight HiFiGAN generator"""
+        """Building a lightweight HiFiGAN generator"""
         class Generator(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -111,11 +110,7 @@ class HiFiGANVocoder:
         try:
             # Accept either numpy array (dB) or torch tensor (dB) to avoid CPU roundtrips.
             if isinstance(mel_db, torch.Tensor):
-                # If the torchaudio prototype pipeline is in use, the
-                # mel_transform and vocoder produced by the same pipeline
-                # are expected to be compatible. In that case, pass the
-                # tensor through unchanged (just ensure batch dim and
-                # device placement).
+               #Passing mel directly in case of audiotorch
                 if getattr(self, 'use_torchaudio', False):
                     mel_tensor = mel_db
                     if mel_tensor.dim() == 2:
@@ -123,9 +118,7 @@ class HiFiGANVocoder:
                     else:
                         mel_tensor = mel_tensor.to(self.device)
                 else:
-                    # For other torch tensor inputs (not from torchaudio
-                    # pipeline) we conservatively handle negative values as
-                    # dB and convert to power.
+                   # Handling negative values and db in case of other than torch audio .
                     mel_tensor = mel_db
                     if mel_tensor.min() < 0:
                         mel_power = torch.pow(10.0, mel_tensor / 10.0)
@@ -138,13 +131,13 @@ class HiFiGANVocoder:
                         mel_tensor = mel_power.to(self.device)
 
             else:
-                # numpy path (legacy)
+              
                 mel_power = librosa.db_to_power(mel_db)
                 mel_tensor = torch.from_numpy(mel_power).float().unsqueeze(0).to(self.device)
 
             # Generate waveform on device
             with torch.no_grad():
-                # Do not apply global mean/std normalization for torchaudio HiFiGAN.
+                
                 # Pass mel_tensor (power) directly to the vocoder to preserve expected scaling.
                 wav_tensor = self.hifigan(mel_tensor)
                 # Remove all singleton dims then convert to numpy
@@ -170,9 +163,8 @@ class HiFiGANVocoder:
             return wav
 
 
-# ================================
 # ENSEMBLE ASV MODELS
-# ================================
+
 
 class EnsembleASVEmbedder:
     """
@@ -358,9 +350,9 @@ class EnsembleASVEmbedder:
         return ensemble_emb
 
 
-# ================================
-# ADVANCED AUDIO PROCESSOR
-# ================================
+
+# ADVANCED AUDIO PROCESSING CLASS
+
 
 class AdvancedAudioProcessor:
     """Enhanced audio processing with perceptual metrics"""
@@ -396,7 +388,7 @@ class AdvancedAudioProcessor:
         if wav_np.ndim == 2 and wav_np.shape[1] == 1:
             wav_np = wav_np.squeeze(1)
 
-        # Ensure float32
+
         wav_np = wav_np.astype(np.float32)
 
         sf.write(path, wav_np, self.sr)
@@ -487,9 +479,9 @@ class AdvancedAudioProcessor:
         return 10 * np.log10(signal_power / noise_power)
 
 
-# ================================
-# ROBUST UNIVERSAL PERTURBATION TRAINER
-# ================================
+
+# ROBUST UNIVERSAL PERTURBATION(DELTA) TRAINER
+
 
 class RobustUniversalDeltaTrainer:
     """
@@ -503,7 +495,7 @@ class RobustUniversalDeltaTrainer:
         
         print(f"\n[INFO] Initializing advanced trainer on device: {self.device}")
         
-        # Ensemble ASV
+        
         self.asv = EnsembleASVEmbedder(device=self.device)
         
         # Audio processor with HiFiGAN
@@ -518,7 +510,7 @@ class RobustUniversalDeltaTrainer:
             dtype=torch.float32, device=self.device, requires_grad=True
         )
         
-        # Optimizer with momentum for better convergence
+        # Optimizer with momentum(beta) for better convergence
         self.optimizer = torch.optim.AdamW(
             [self.delta], lr=config['lr'],
             betas=(0.9, 0.999), weight_decay=1e-4
@@ -563,7 +555,7 @@ class RobustUniversalDeltaTrainer:
         delta_tiled = delta_tiled[:, :, :T]
         
         if use_augmentation and self.training:
-            # Random scaling for robustness
+            
             scale = torch.rand(batch_size, 1, 1, device=self.device) * 0.2 + 0.9
             delta_tiled = delta_tiled * scale
         
@@ -580,7 +572,7 @@ class RobustUniversalDeltaTrainer:
             return mel_batch + noise
         
         else:
-            # Learned purification
+            # Learned purification uses the custom purifier class 
             try:
                 return self.purifier(mel_batch)
             except:
@@ -590,14 +582,13 @@ class RobustUniversalDeltaTrainer:
     
     def compute_losses(self, mel_orig_batch, mel_prot_batch, wav_orig_list):
         """Advanced multi-objective loss"""
-        # Vectorized/batched embedding computation to avoid per-sample CPU↔GPU roundtrips.
+       
         # `mel_orig_batch` and `mel_prot_batch` are expected to be torch tensors on device: [B, n_mels, T]
         try:
             B = mel_orig_batch.size(0)
 
-            # Compute embeddings WITHOUT torch.no_grad() so gradients from the
-            # attack loss can flow back to the mel inputs and ultimately to
-            # the learnable `self.delta`. ASV model parameters are frozen
+            # Compute embeddings WITHOUT torch.no_grad() so gradients from the attack loss can flow back to the mel inputs and ultimately to the learnable `self.delta`. 
+            #ASV model parameters are frozen becuase we use model.eval()
             # (requires_grad=False) so only inputs receive gradients.
             emb_orig_batch = self.asv.extract_embedding_from_mel_tensor(mel_orig_batch)
             emb_prot_batch = self.asv.extract_embedding_from_mel_tensor(mel_prot_batch)
@@ -667,8 +658,7 @@ class RobustUniversalDeltaTrainer:
                         continue
                     
                     mel = self.audio_proc.wav_to_mel(wav)
-                    # Ensure mel is a numpy array for padding. If wav_to_mel
-                    # returned a torch.Tensor (vocoder mel), convert to numpy.
+                    # mel must be in np format
                     if isinstance(mel, torch.Tensor):
                         mel_np = mel.detach().cpu().numpy()
                     else:
@@ -800,9 +790,8 @@ class RobustUniversalDeltaTrainer:
         print(f"Checkpoints saved in: checkpoints_advanced/")
 
 
-# ================================
-# ADVANCED PROTECTOR
-# ================================
+# PROTECTION CLASS
+
 
 class AdvancedAudioProtector:
     """Apply advanced protection to audio"""
@@ -831,7 +820,6 @@ class AdvancedAudioProtector:
         wav, sr = self.audio_proc.load_audio(input_path)
         print(f"  Duration: {len(wav)/sr:.2f}s")
         
-        # If diagnostic scale == 0.0, skip processing and return original audio
         if float(scale) == 0.0:
             print("[DEBUG] scale==0.0: writing original audio without protection (diagnostic)")
             self.audio_proc.save_audio(output_path, wav)
@@ -957,7 +945,6 @@ class AdvancedAudioProtector:
                         fig.savefig(img_path)
                         plt.close(fig)
 
-                        # Clean up mel debug artifacts to avoid cluttering workspace
                         try:
                             candidates = [base + '_mel_orig.npy', base + '_mel_prot.npy', base + '_mel_diff.npy']
                             for p in candidates:
@@ -1142,9 +1129,11 @@ class AdvancedAudioProtector:
         print(f"  Perceptual Loss: {perceptual_loss:.6f}")
 
 
-# ================================
-# ADVANCED EVALUATOR
-# ================================
+
+
+# EVALUATION CLASS
+from pystoi import stoi
+from pesq import pesq
 
 class AdvancedProtectionEvaluator:
     """Comprehensive evaluation"""
@@ -1192,9 +1181,17 @@ class AdvancedProtectionEvaluator:
         
         # 2. Audio Quality
         print("\n🎵 Audio Quality Metrics:")
+
+        # SNR
         snr = self.audio_proc.compute_snr(wav_orig, wav_prot)
+
+        # Perceptual Loss
         perceptual_loss = self.audio_proc.compute_perceptual_loss(wav_orig, wav_prot)
-        
+        # PESQ (narrowband)
+        pesq_score = pesq(self.config['sr'], wav_orig, wav_prot, 'nb')
+
+        # STOI
+        stoi_score = stoi(wav_orig, wav_prot, self.config['sr'], extended=False)
         print(f"  SNR: {snr:.2f} dB")
         if snr > 35:
             print("    → Imperceptible difference")
@@ -1204,7 +1201,8 @@ class AdvancedProtectionEvaluator:
             print("    → Noticeable differences")
         
         print(f"  Perceptual Loss: {perceptual_loss:.6f}")
-        
+        print(f"  PESQ: {pesq_score:.4f}  (higher = better)")
+        print(f"  STOI: {stoi_score:.4f}  (higher = better speech intelligibility)")
         # 3. Purification Resistance Test
         print("\n🛡️  Purification Resistance:")
         self._test_purification_resistance(wav_orig, wav_prot)
@@ -1251,9 +1249,10 @@ class AdvancedProtectionEvaluator:
             print("  ❌ Vulnerable to purification")
 
 
-# ================================
-# MAIN CLI
-# ================================
+
+
+# MAIN LOOP
+
 
 def main():
     parser = argparse.ArgumentParser(

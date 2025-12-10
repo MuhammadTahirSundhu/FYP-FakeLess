@@ -714,7 +714,7 @@ class RobustUniversalDeltaTrainer:
             # Backward pass
             self.optimizer.zero_grad()
             total_loss.backward()
-            torch.nn.utils.clip_grad_norm_([self.delta], max_norm=1.0)
+            #torch.nn.utils.clip_grad_norm_([self.delta], max_norm=1.0)
             self.optimizer.step()
             
             # Project to epsilon ball
@@ -785,7 +785,7 @@ class RobustUniversalDeltaTrainer:
             checkpoint_path = f"checkpoints_advanced/universal_delta_epoch{epoch}.npy"
             np.save(checkpoint_path, self.delta.detach().cpu().numpy())
             print(f"  ✅ Saved: {checkpoint_path}")
-            
+            self.config['epsilon'] += 0.05
             if metrics.get('attack_loss', float('inf')) < best_attack_loss:
                 best_attack_loss = metrics['attack_loss']
                 np.save("checkpoints_advanced/universal_delta_best.npy", 
@@ -1264,7 +1264,7 @@ def main():
     train_parser.add_argument('--epochs', type=int, default=30, help='Number of epochs')
     train_parser.add_argument('--batch-size', type=int, default=4, help='Batch size')
     train_parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
-    train_parser.add_argument('--epsilon', type=float, default=0.025, help='Perturbation budget')
+    train_parser.add_argument('--epsilon', type=float, default=0.1, help='Perturbation budget')
     
     # Protect command
     protect_parser = subparsers.add_parser('protect', help='Protect audio file')

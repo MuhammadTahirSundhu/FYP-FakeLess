@@ -82,6 +82,8 @@ def protect_audio():
     if 'audio' not in request.files:
         return jsonify({'error': 'No audio file part in the request'}), 400
     file = request.files['audio']
+    scale = int(request.form.get('scale', 1))
+    print(f"Received scale parameter: {scale}")
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     # if not allowed_file(file.filename):
@@ -117,7 +119,7 @@ def protect_audio():
         output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
 
         import time; time.sleep(0.1)
-        protector.protect_audio(input_path, output_path, 1)
+        protector.protect_audio(input_path, output_path, scale)
         import time; time.sleep(1)
 
         # Read the protected file into memory

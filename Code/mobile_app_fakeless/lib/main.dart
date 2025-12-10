@@ -9,29 +9,28 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  // Root widget: follow system theme (light/dark)
   @override
   Widget build(BuildContext context) {
+    final seed = const Color.fromARGB(255, 99, 195, 244);
+
+    final lightTheme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light),
+      useMaterial3: true,
+      brightness: Brightness.light,
+    );
+
+    final darkTheme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark),
+      useMaterial3: true,
+      brightness: Brightness.dark,
+    );
+
     return MaterialApp(
       title: 'Fakeless',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 87, 186, 236)),
-      ),
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: ThemeMode.system, // follow device/system setting
       home: const SplashScreen(),
     );
   }
@@ -90,12 +89,17 @@ class _MyHomePageState extends State<MyHomePage> {
         // TRY THIS: Try changing the color here to a specific color (to
         // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
         // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         // Here we take the value from the MyHomePage object that was created by
         // the App.build method, and use it to set our appbar title.
         title: Center(
-          child: Text(widget.title)
+          child: Text(
+            widget.title,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onPrimary,
+            )
           ),
+        ),
       ),
       body: Center(
         // Center is a layout widget. It takes a single child and positions it
@@ -125,26 +129,40 @@ class _MyHomePageState extends State<MyHomePage> {
                 FloatingActionButton.extended(
                   onPressed: _uploadAudio,
                   foregroundColor: Color.fromARGB(255, 0, 0, 0),
-                  backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   hoverColor: const Color.fromARGB(255, 162, 216, 245),
                   splashColor: const Color.fromARGB(255, 3, 159, 243),
                   elevation: 0,
                   hoverElevation: 2,
                   highlightElevation: 0,
-                  label: Text('Upload Audio'),
+                  label: Text(
+                    'Upload Audio',
+                    style: TextStyle(
+                      // fontSize: 16,
+                      // fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                  ),
                   heroTag: 'uploadButton',
                 ),
 
                 FloatingActionButton.extended(
                   onPressed: _recordAudio,
                   foregroundColor: Color.fromARGB(255, 0, 0, 0),
-                  backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   hoverColor: const Color.fromARGB(255, 162, 216, 245),
                   splashColor: const Color.fromARGB(255, 3, 159, 243),
                   elevation: 0,
                   hoverElevation: 2,
                   highlightElevation: 0,
-                  label: Text('Record Audio'),
+                  label: Text(
+                    'Record Audio',
+                    style: TextStyle(
+                      // fontSize: 16,
+                      // fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onPrimary,
+                    ),
+                  ),
                   heroTag: 'recordButton',
                 ),
               ],
@@ -166,6 +184,7 @@ class _MyHomePageState extends State<MyHomePage> {
       //   heroTag: 'incrementButton',
       //   child: const Icon(Icons.add),
       // ), // This trailing comma makes auto-formatting nicer for build methods.
+      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
     );
   }
 }

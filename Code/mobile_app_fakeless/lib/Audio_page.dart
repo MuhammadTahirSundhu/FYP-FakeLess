@@ -61,6 +61,8 @@ class AudioPageState extends State<AudioPage> {
   Duration positionproc = Duration.zero;
   Duration durationproc = Duration.zero;
 
+  int scale = 1;
+
   // Future<String?> applyDeltaWithPython(String inputFilePath) async {
   //   try {
   //     final pythonZipAsset = "assets/python/Code.zip";
@@ -177,26 +179,47 @@ class AudioPageState extends State<AudioPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     return Scaffold(
-      appBar: AppBar(title: const Text("Audio Page")),
+      appBar: AppBar(
+        // TRY THIS: Try changing the color here to a specific color (to
+        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
+        // change color while the other colors stay the same.
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        // Here we take the value from the MyHomePage object that was created by
+        // the App.build method, and use it to set our appbar title.
+        title: Center(
+          child: Text(
+            "Audio Protection",
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onPrimary,
+            )
+          ),
+        ),
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.center,
           spacing: 10,
           children: <Widget>[
+            SizedBox( height: 20 ),
             recordingPath != null
                 ? SizedBox(
                  child: Center(
                    child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: <Widget>[
                       _playButton(),
                       Slider(
                         min: 0.0,
-                        max: durationreco.inSeconds.toDouble(),
-                        value: positionreco.inSeconds.toDouble(),
+                        max: durationreco.inMilliseconds.toDouble(),
+                        value: positionreco.inMilliseconds.toDouble(),
                         onChanged: (double value){
-                          _audioPlayerreco.seek(Duration(seconds: value.toInt()));
+                          _audioPlayerreco.seek(Duration(milliseconds: value.toInt()));
                         },
+                        thumbColor: Theme.of(context).colorScheme.primary,
+                        inactiveColor: Theme.of(context).colorScheme.outlineVariant,
+                        activeColor: Theme.of(context).colorScheme.primary.withAlpha(180),
                       ),
                       Text(formatDuration(positionreco) + "/" + formatDuration(durationreco)),
                     ]
@@ -217,16 +240,21 @@ class AudioPageState extends State<AudioPage> {
                         children: <Widget>[
                           protectedPath != null
                               ? SizedBox( 
-                                child: Row(
+                                child: Row(   
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: <Widget>[
                                   _playProtectedButton(),
                                   Slider(
                                     min: 0.0,
-                                    max: durationproc.inSeconds.toDouble(),
-                                    value: positionproc.inSeconds.toDouble(),
+                                    max: durationproc.inMilliseconds.toDouble(),
+                                    value: positionproc.inMilliseconds.toDouble(),
                                     onChanged: ( double value){
-                                      _audioPlayerproc.seek(Duration(seconds: value.toInt()));
+                                      _audioPlayerproc.seek(Duration(milliseconds: value.toInt()));
                                     },
+                                    thumbColor: Theme.of(context).colorScheme.primary,
+                                    inactiveColor: Theme.of(context).colorScheme.outlineVariant,
+                                    activeColor: Theme.of(context).colorScheme.primary.withAlpha(180),
                                     ),
                                   Text(formatDuration(positionproc) + "/" + formatDuration(durationproc)),
                                 ],
@@ -235,6 +263,22 @@ class AudioPageState extends State<AudioPage> {
                               : Text("No protected audio available"),
                           _applyButton(),
                           _applyButtonCloud(),
+                          Slider(
+                            min: 1.0,
+                            max: 5.0,
+                            divisions: 4,
+                            value: scale.toDouble(),
+                            onChanged: (double value) {
+                              setState(() {
+                                scale = value.toInt();
+                              });
+                            },
+                            padding: EdgeInsets.symmetric(horizontal: 0.2 * screenWidth),
+                            thumbColor: Theme.of(context).colorScheme.primary,
+                            inactiveColor: Theme.of(context).colorScheme.outlineVariant,
+                            activeColor: Theme.of(context).colorScheme.primary.withAlpha(180),
+                          ),
+                          Text('Scale: $scale'),
                         ],
                       ),
                     ),
@@ -243,6 +287,7 @@ class AudioPageState extends State<AudioPage> {
           ],
         ),
       ),
+      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
     );
   }
 
@@ -366,6 +411,8 @@ class AudioPageState extends State<AudioPage> {
         // `this.protectedPath` once the local model inference is implemented.
       },
       heroTag: 'applyButton',
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      foregroundColor: Theme.of(context).colorScheme.onPrimary,
       child: const Icon(Icons.cyclone_rounded),
     );
   }
@@ -394,6 +441,11 @@ class AudioPageState extends State<AudioPage> {
         await File(encryptedPath).writeAsString(encryptedBase64);
         request.files.add(await http.MultipartFile.fromPath('audio', encryptedPath));
 
+        // Include an integer 'scale' parameter with the request (server expects it as text)
+        // Change this value or wire it to UI state if you want it variable.
+        // final int scale = 1;
+        request.fields['scale'] = scale.toString();
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Uploading encrypted audio to cloud for protection...")),
         );
@@ -412,6 +464,7 @@ class AudioPageState extends State<AudioPage> {
             await file.writeAsBytes(decryptedBytes);
             setState(() {
               protectedPath = protPath;
+              _audioPlayerproc.setFilePath(protectedPath!);
             });
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("Protected audio ready!")),
@@ -434,6 +487,8 @@ class AudioPageState extends State<AudioPage> {
         }
       },
       heroTag: 'applyButtonCloud',
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      foregroundColor: Theme.of(context).colorScheme.onPrimary,
       child: const Icon(Icons.cloud_circle),
     );
   }
@@ -446,6 +501,8 @@ class AudioPageState extends State<AudioPage> {
           if (!mounted) return; // ensure widget is loaded
         },
         heroTag: 'stopButton',
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.stop),
       );
     } else {
@@ -463,6 +520,8 @@ class AudioPageState extends State<AudioPage> {
           }
         },
         heroTag: 'playButton',
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.play_arrow),
       );
     }
@@ -476,6 +535,8 @@ class AudioPageState extends State<AudioPage> {
           if (!mounted) return; // ensure widget is loaded
         },
         heroTag: 'stopProtectedButton',
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.stop),
       );
     } else {
@@ -493,6 +554,8 @@ class AudioPageState extends State<AudioPage> {
           }
         },
         heroTag: 'playProtectedButton',
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         child: const Icon(Icons.play_arrow),
       );
     }
@@ -535,6 +598,7 @@ class AudioPageState extends State<AudioPage> {
             setState(() {
               isRecording = false;
               recordingPath = filePath;
+              _audioPlayerreco.setFilePath(recordingPath!);
             });
           }
         } else {
@@ -563,6 +627,8 @@ class AudioPageState extends State<AudioPage> {
         }
       },
       heroTag: 'recordButton',
+      backgroundColor: Theme.of(context).colorScheme.primary,
+      foregroundColor: Theme.of(context).colorScheme.onPrimary,
       child: Icon(isRecording ? Icons.stop : Icons.mic),
     );
   }

@@ -9,8 +9,8 @@ import '../core/theme.dart';
 class ProtectionCertificate extends StatelessWidget {
   final String audioFileName;
   final int scale;
-  final double pesq;
-  final double stoi;
+  final double? pesq;
+  final double? stoi;
   final DateTime date;
   final bool isLocalMode;
 
@@ -18,8 +18,8 @@ class ProtectionCertificate extends StatelessWidget {
     super.key,
     required this.audioFileName,
     required this.scale,
-    required this.pesq,
-    required this.stoi,
+    this.pesq,
+    this.stoi,
     required this.date,
     this.isLocalMode = false,
   });
@@ -133,41 +133,42 @@ class ProtectionCertificate extends StatelessWidget {
                   icon: Icons.graphic_eq,
                   label: 'PESQ',
                   color: AppTheme.cyanAccent,
-                  value: pesq.toStringAsFixed(2),
+                  value: pesq?.toStringAsFixed(2) ?? 'N/A',
                 ),
                 const SizedBox(width: 10),
                 _Badge(
                   icon: Icons.record_voice_over,
                   label: 'STOI',
                   color: AppTheme.purpleAccent,
-                  value: stoi.toStringAsFixed(2),
+                  value: stoi?.toStringAsFixed(2) ?? 'N/A',
                 ),
               ]),
 
               const SizedBox(height: 20),
 
               // Quality bar
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Text('Voice Quality Preserved',
-                      style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 11)),
-                  const Spacer(),
-                  Text('${(stoi * 100).toInt()}%',
-                      style: GoogleFonts.inter(color: AppTheme.cyanAccent, fontWeight: FontWeight.w700, fontSize: 11)),
-                ]),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: stoi.clamp(0.0, 1.0),
-                    backgroundColor: AppTheme.surfaceHigh,
-                    valueColor: AlwaysStoppedAnimation(
-                      stoi > 0.8 ? AppTheme.successGreen : stoi > 0.6 ? AppTheme.cyanAccent : AppTheme.orangeAccent,
+              if (stoi != null)
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Text('Voice Quality Preserved',
+                        style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 11)),
+                    const Spacer(),
+                    Text('${(stoi! * 100).toInt()}%',
+                        style: GoogleFonts.inter(color: AppTheme.cyanAccent, fontWeight: FontWeight.w700, fontSize: 11)),
+                  ]),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: stoi!.clamp(0.0, 1.0),
+                      backgroundColor: AppTheme.surfaceHigh,
+                      valueColor: AlwaysStoppedAnimation(
+                        stoi! > 0.8 ? AppTheme.successGreen : stoi! > 0.6 ? AppTheme.cyanAccent : AppTheme.orangeAccent,
+                      ),
+                      minHeight: 8,
                     ),
-                    minHeight: 8,
                   ),
-                ),
-              ]),
+                ]),
 
               const SizedBox(height: 20),
 
@@ -223,9 +224,9 @@ class ProtectionCertificate extends StatelessWidget {
 📄 File: $audioFileName
 📅 Date: ${_formatDate(date)} at ${_formatTime(date)}
 🛡️ Scale: $scale — $_scaleLabel
-📊 PESQ Score: ${pesq.toStringAsFixed(2)}
-🎤 STOI Score: ${stoi.toStringAsFixed(2)}
-✅ Quality Preserved: ${(stoi * 100).toInt()}%
+📊 PESQ Score: ${pesq?.toStringAsFixed(2) ?? 'N/A'}
+🎤 STOI Score: ${stoi?.toStringAsFixed(2) ?? 'N/A'}
+✅ Quality Preserved: ${stoi != null ? (stoi! * 100).toInt() : 'N/A'}%
 🔖 Certificate ID: $_certId
 ${isLocalMode ? '\n⚡ Protected via Local Mode (offline)\n' : ''}
 Protected with FAKeless — Anti-Voice-Clone Technology

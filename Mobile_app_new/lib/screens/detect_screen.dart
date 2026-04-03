@@ -387,14 +387,22 @@ class _DetectScreenState extends State<DetectScreen> {
                         await _audioPlayerOriginal.pause();
                         if (mounted) setState(() => _isPlayingOriginal = false);
                       } else {
-                        await _audioPlayerOriginal.setFilePath(_audioPath!);
-                        _audioPlayerOriginal.play();
-                        if (mounted) setState(() => _isPlayingOriginal = true);
-                        _audioPlayerOriginal.playerStateStream.listen((state) {
-                          if (state.processingState == ProcessingState.completed) {
-                            if (mounted) setState(() => _isPlayingOriginal = false);
+                        try {
+                          await _audioPlayerOriginal.setFilePath(_audioPath!);
+                          _audioPlayerOriginal.play();
+                          if (mounted) setState(() => _isPlayingOriginal = true);
+                          _audioPlayerOriginal.playerStateStream.listen((state) {
+                            if (state.processingState == ProcessingState.completed) {
+                              if (mounted) setState(() => _isPlayingOriginal = false);
+                            }
+                          });
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error playing original: $e'), backgroundColor: AppTheme.errorRed),
+                            );
                           }
-                        });
+                        }
                       }
                     },
                     onPlayProtected: () async {
@@ -406,14 +414,22 @@ class _DetectScreenState extends State<DetectScreen> {
                         await _audioPlayerCloned.pause();
                         if (mounted) setState(() => _isPlayingCloned = false);
                       } else {
-                        await _audioPlayerCloned.setFilePath(_clonedAudioPath!);
-                        _audioPlayerCloned.play();
-                        if (mounted) setState(() => _isPlayingCloned = true);
-                        _audioPlayerCloned.playerStateStream.listen((state) {
-                          if (state.processingState == ProcessingState.completed) {
-                            if (mounted) setState(() => _isPlayingCloned = false);
+                        try {
+                          await _audioPlayerCloned.setFilePath(_clonedAudioPath!);
+                          _audioPlayerCloned.play();
+                          if (mounted) setState(() => _isPlayingCloned = true);
+                          _audioPlayerCloned.playerStateStream.listen((state) {
+                            if (state.processingState == ProcessingState.completed) {
+                              if (mounted) setState(() => _isPlayingCloned = false);
+                            }
+                          });
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error playing cloned: $e'), backgroundColor: AppTheme.errorRed),
+                            );
                           }
-                        });
+                        }
                       }
                     },
                   ).animate().scaleXY(begin: 0.9).fadeIn(),

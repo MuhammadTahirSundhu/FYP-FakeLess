@@ -229,9 +229,8 @@ class ProtectScreenState extends State<ProtectScreen> {
       if (!mounted) return;
       setState(() {
         _protectedPath = result['path'];
-        // The live server now returns raw WAV without metrics. Estimate based on scale to keep UI functional.
-        _pesqResult = (4.3 - (scale * 0.35)).clamp(1.0, 4.5); 
-        _stoiResult = (0.95 - (scale * 0.06)).clamp(0.1, 1.0);
+        _pesqResult = result['pesq'];
+        _stoiResult = result['stoi'];
       });
       await _audioPlayerProtected.setFilePath(_protectedPath!);
       await _saveSession(scale, false);
@@ -274,13 +273,13 @@ class ProtectScreenState extends State<ProtectScreen> {
   }
 
   Future<void> _saveSession(int scale, bool isLocal) async {
-    if (_protectedPath == null || _pesqResult == null || _stoiResult == null) return;
+    if (_protectedPath == null) return;
     final session = ProtectionSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       date: DateTime.now(),
       scale: scale,
-      pesq: _pesqResult!,
-      stoi: _stoiResult!,
+      pesq: _pesqResult,
+      stoi: _stoiResult,
       audioPath: _protectedPath!,
       isLocalMode: isLocal,
     );
@@ -521,7 +520,7 @@ class ProtectScreenState extends State<ProtectScreen> {
                 ),
 
               // ── Results ──
-              if (_protectedPath != null && _pesqResult != null && _stoiResult != null) ...[
+              if (_protectedPath != null) ...[
                 const SizedBox(height: 32),
                 const Divider(color: AppTheme.surfaceHigh),
                 const SizedBox(height: 20),
@@ -551,7 +550,7 @@ class ProtectScreenState extends State<ProtectScreen> {
                   label: 'PROTECTED',
                 ),
                 const SizedBox(height: 24),
-                ResultsDisplay(pesqResult: _pesqResult!, stoiResult: _stoiResult!),
+                ResultsDisplay(pesqResult: _pesqResult, stoiResult: _stoiResult),
                 const SizedBox(height: 20),
                 // ── Action buttons row ──
                 Row(
@@ -621,8 +620,8 @@ class ProtectScreenState extends State<ProtectScreen> {
                 ProtectionCertificate(
                   audioFileName: p.basename(_recordingPath!),
                   scale: _currentScale,
-                  pesq: _pesqResult!,
-                  stoi: _stoiResult!,
+                  pesq: _pesqResult,
+                  stoi: _stoiResult,
                   date: DateTime.now(),
                   isLocalMode: _isLocalFallbackActive,
                 ),

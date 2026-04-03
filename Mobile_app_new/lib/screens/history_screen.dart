@@ -206,9 +206,9 @@ class _SessionCard extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
           child: Row(children: [
-            _MetricPill(label: 'PESQ', value: session.pesq.toStringAsFixed(2), color: AppTheme.cyanAccent),
+            _MetricPill(label: 'PESQ', value: session.pesq?.toStringAsFixed(2) ?? 'N/A', color: AppTheme.cyanAccent),
             const SizedBox(width: 10),
-            _MetricPill(label: 'STOI', value: session.stoi.toStringAsFixed(2), color: AppTheme.orangeAccent),
+            _MetricPill(label: 'STOI', value: session.stoi?.toStringAsFixed(2) ?? 'N/A', color: AppTheme.orangeAccent),
             const Spacer(),
             Row(children: [
               const Icon(Icons.access_time, color: AppTheme.textSecondary, size: 13),

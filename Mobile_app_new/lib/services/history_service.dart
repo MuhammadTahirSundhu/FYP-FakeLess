@@ -5,8 +5,8 @@ class ProtectionSession {
   final String id;
   final DateTime date;
   final int scale;
-  final double pesq;
-  final double stoi;
+  final double? pesq;
+  final double? stoi;
   final String audioPath;
   final bool isLocalMode;
 
@@ -14,8 +14,8 @@ class ProtectionSession {
     required this.id,
     required this.date,
     required this.scale,
-    required this.pesq,
-    required this.stoi,
+    this.pesq,
+    this.stoi,
     required this.audioPath,
     this.isLocalMode = false,
   });
@@ -35,8 +35,8 @@ class ProtectionSession {
       id: json['id'] as String,
       date: DateTime.parse(json['date'] as String),
       scale: json['scale'] as int,
-      pesq: (json['pesq'] as num).toDouble(),
-      stoi: (json['stoi'] as num).toDouble(),
+      pesq: json['pesq'] != null ? (json['pesq'] as num).toDouble() : null,
+      stoi: json['stoi'] != null ? (json['stoi'] as num).toDouble() : null,
       audioPath: json['audioPath'] as String,
       isLocalMode: json['isLocalMode'] as bool? ?? false,
     );

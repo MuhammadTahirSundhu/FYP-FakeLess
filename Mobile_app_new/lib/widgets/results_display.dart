@@ -4,21 +4,21 @@ import '../core/theme.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 class ResultsDisplay extends StatelessWidget {
-  final double pesqResult;
-  final double stoiResult;
+  final double? pesqResult;
+  final double? stoiResult;
 
   const ResultsDisplay({
     super.key,
-    required this.pesqResult,
-    required this.stoiResult,
+    this.pesqResult,
+    this.stoiResult,
   });
 
   @override
   Widget build(BuildContext context) {
     // PESQ max is roughly 4.5
-    final pesqPercent = pesqResult.clamp(0.0, 4.5) / 4.5;
+    final pesqPercent = (pesqResult?.clamp(0.0, 4.5) ?? 0.0) / 4.5;
     // STOI max is 1.0
-    final stoiPercent = stoiResult.clamp(0.0, 1.0);
+    final stoiPercent = stoiResult?.clamp(0.0, 1.0) ?? 0.0;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -44,7 +44,7 @@ class ResultsDisplay extends StatelessWidget {
   Widget _buildIndicator({
     required String title,
     required String subtitle,
-    required double value,
+    required double? value,
     required double percent,
     required Color color,
   }) {
@@ -57,7 +57,7 @@ class ResultsDisplay extends StatelessWidget {
           animationDuration: 1200,
           percent: percent,
           center: Text(
-            value.toStringAsFixed(2),
+            value != null ? value.toStringAsFixed(2) : 'N/A',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16.0),
           ),
           circularStrokeCap: CircularStrokeCap.round,

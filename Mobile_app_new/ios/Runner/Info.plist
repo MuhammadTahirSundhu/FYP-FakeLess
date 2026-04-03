@@ -2,8 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
-		<key>NSMicrophoneUsageDescription</key>
-		<string>Some message to describe why you need this permission</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>FAKeless needs access to your microphone to record audio for protection and cloning analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FAKeless needs access to your photo library to allow you to select audio files for protection.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>FAKeless needs access to your media library to process selected audio files.</string>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>

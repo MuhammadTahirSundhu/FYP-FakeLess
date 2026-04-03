@@ -1,16 +1,2 @@
-# mobile_app_fakeless
-
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# FakeLess-AI-Mobile-App-Audio-Deepfake-Prevention-
+FakeLess AI is a Flutter-based mobile application designed to proactively prevent audio deepfake attacks and voice cloning misuse. The system focuses on safeguarding voice identity by implementing AI-driven validation and security mechanisms, ensuring that only authentic voice interactions are trusted within the platform.

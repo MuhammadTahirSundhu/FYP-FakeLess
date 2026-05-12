@@ -39,9 +39,8 @@ from typing import List, Tuple, Dict
 import random
 warnings.filterwarnings('ignore')
 
-# ================================
-# HIFIGAN VOCODER (SUPERIOR QUALITY)
-# ================================
+
+# HIFIGAN VOCODER class , replaces Griffin-Lam for better quality
 
 class HiFiGANVocoder:
     """
@@ -54,7 +53,7 @@ class HiFiGANVocoder:
         self.device = device
         
         try:
-            # Try torchaudio implementation first
+            
             from torchaudio.prototype.pipelines import HIFIGAN_VOCODER_V3_LJSPEECH
             self.hifigan = HIFIGAN_VOCODER_V3_LJSPEECH.get_vocoder().to(device)
             self.mel_transform = HIFIGAN_VOCODER_V3_LJSPEECH.get_mel_transform()
@@ -63,7 +62,7 @@ class HiFiGANVocoder:
             print("[INFO] ✅ Using torchaudio HiFiGAN")
             
         except:
-            # Fallback: Custom HiFiGAN implementation
+            
             print("[INFO] Torchaudio unavailable, using custom HiFiGAN")
             self.hifigan = self._build_custom_hifigan().to(device)
             self.use_torchaudio = False
@@ -72,7 +71,7 @@ class HiFiGANVocoder:
         self.hifigan.eval()
     
     def _build_custom_hifigan(self):
-        """Build lightweight HiFiGAN generator"""
+        """Building a lightweight HiFiGAN generator"""
         class Generator(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -111,11 +110,7 @@ class HiFiGANVocoder:
         try:
             # Accept either numpy array (dB) or torch tensor (dB) to avoid CPU roundtrips.
             if isinstance(mel_db, torch.Tensor):
-                # If the torchaudio prototype pipeline is in use, the
-                # mel_transform and vocoder produced by the same pipeline
-                # are expected to be compatible. In that case, pass the
-                # tensor through unchanged (just ensure batch dim and
-                # device placement).
+               #Passing mel directly in case of audiotorch
                 if getattr(self, 'use_torchaudio', False):
                     mel_tensor = mel_db
                     if mel_tensor.dim() == 2:
@@ -123,9 +118,7 @@ class HiFiGANVocoder:
                     else:
                         mel_tensor = mel_tensor.to(self.device)
                 else:
-                    # For other torch tensor inputs (not from torchaudio
-                    # pipeline) we conservatively handle negative values as
-                    # dB and convert to power.
+                   # Handling negative values and db in case of other than torch audio .
                     mel_tensor = mel_db
                     if mel_tensor.min() < 0:
                         mel_power = torch.pow(10.0, mel_tensor / 10.0)
@@ -138,13 +131,13 @@ class HiFiGANVocoder:
                         mel_tensor = mel_power.to(self.device)
 
             else:
-                # numpy path (legacy)
+              
                 mel_power = librosa.db_to_power(mel_db)
                 mel_tensor = torch.from_numpy(mel_power).float().unsqueeze(0).to(self.device)
 
             # Generate waveform on device
             with torch.no_grad():
-                # Do not apply global mean/std normalization for torchaudio HiFiGAN.
+                
                 # Pass mel_tensor (power) directly to the vocoder to preserve expected scaling.
                 wav_tensor = self.hifigan(mel_tensor)
                 # Remove all singleton dims then convert to numpy
@@ -164,15 +157,14 @@ class HiFiGANVocoder:
             print(f"[WARN] HiFiGAN failed, using Griffin-Lim fallback: {e}")
             mel_power = librosa.db_to_power(mel_db)
             wav = librosa.feature.inverse.mel_to_audio(
-                mel_power, sr=16000, n_fft=1024,
+                mel_power, sr=24000, n_fft=1024,
                 hop_length=256, n_iter=32
             )
             return wav
 
 
-# ================================
 # ENSEMBLE ASV MODELS
-# ================================
+
 
 class EnsembleASVEmbedder:
     """
@@ -358,9 +350,9 @@ class EnsembleASVEmbedder:
         return ensemble_emb
 
 
-# ================================
-# ADVANCED AUDIO PROCESSOR
-# ================================
+
+# ADVANCED AUDIO PROCESSING CLASS
+
 
 class AdvancedAudioProcessor:
     """Enhanced audio processing with perceptual metrics"""
@@ -396,7 +388,7 @@ class AdvancedAudioProcessor:
         if wav_np.ndim == 2 and wav_np.shape[1] == 1:
             wav_np = wav_np.squeeze(1)
 
-        # Ensure float32
+
         wav_np = wav_np.astype(np.float32)
 
         sf.write(path, wav_np, self.sr)
@@ -487,9 +479,9 @@ class AdvancedAudioProcessor:
         return 10 * np.log10(signal_power / noise_power)
 
 
-# ================================
-# ROBUST UNIVERSAL PERTURBATION TRAINER
-# ================================
+
+# ROBUST UNIVERSAL PERTURBATION(DELTA) TRAINER
+
 
 class RobustUniversalDeltaTrainer:
     """
@@ -503,7 +495,7 @@ class RobustUniversalDeltaTrainer:
         
         print(f"\n[INFO] Initializing advanced trainer on device: {self.device}")
         
-        # Ensemble ASV
+        
         self.asv = EnsembleASVEmbedder(device=self.device)
         
         # Audio processor with HiFiGAN
@@ -513,15 +505,21 @@ class RobustUniversalDeltaTrainer:
         )
         
         # Universal delta (learnable perturbation)
-        self.delta = torch.zeros(
-            (config['n_mels'], config['delta_T']),
-            dtype=torch.float32, device=self.device, requires_grad=True
-        )
+        # self.delta = torch.zeros(
+        #     (config['n_mels'], config['delta_T']),
+        #     dtype=torch.float32, device=self.device, requires_grad=True
+        # )
         
-        # Optimizer with momentum for better convergence
+        self.delta = torch.randn(
+            (config['n_mels'], config['delta_T']),
+            dtype=torch.float32, device=self.device
+        ) * 0.01  # Small random values
+        self.delta.requires_grad = True
+
+        # Optimizer with momentum(beta) for better convergence
         self.optimizer = torch.optim.AdamW(
             [self.delta], lr=config['lr'],
-            betas=(0.9, 0.999), weight_decay=1e-4
+            betas=(0.5, 0.999), weight_decay=1e-4
         )
         
         # Learning rate scheduler
@@ -563,9 +561,16 @@ class RobustUniversalDeltaTrainer:
         delta_tiled = delta_tiled[:, :, :T]
         
         if use_augmentation and self.training:
-            # Random scaling for robustness
-            scale = torch.rand(batch_size, 1, 1, device=self.device) * 0.2 + 0.9
+            
+            scale = 5 # torch.rand(batch_size, 1, 1, device=self.device) * 0.2 + 0.9
             delta_tiled = delta_tiled * scale
+
+        # 🔍 Verify delta is actually changing the mel
+        if torch.rand(1).item() < 0.01:  # Sample check
+            diff = (mel_batch + delta_tiled - mel_batch).abs().mean()
+            print(f"[DEBUG] Actual mel change from delta: {diff.item():.6f}")
+            if diff.item() < 1e-6:
+                print("[WARNING] Delta has negligible effect on mel!")
         
         return mel_batch + delta_tiled
     
@@ -580,7 +585,7 @@ class RobustUniversalDeltaTrainer:
             return mel_batch + noise
         
         else:
-            # Learned purification
+            # Learned purification uses the custom purifier class 
             try:
                 return self.purifier(mel_batch)
             except:
@@ -589,50 +594,106 @@ class RobustUniversalDeltaTrainer:
                 return mel_batch + noise
     
     def compute_losses(self, mel_orig_batch, mel_prot_batch, wav_orig_list):
-        """Advanced multi-objective loss"""
-        # Vectorized/batched embedding computation to avoid per-sample CPU↔GPU roundtrips.
-        # `mel_orig_batch` and `mel_prot_batch` are expected to be torch tensors on device: [B, n_mels, T]
+        # """Advanced multi-objective loss"""
+       
+        # # `mel_orig_batch` and `mel_prot_batch` are expected to be torch tensors on device: [B, n_mels, T]
+        # try:
+        #     B = mel_orig_batch.size(0)
+
+        #     # Compute embeddings WITHOUT torch.no_grad() so gradients from the attack loss can flow back to the mel inputs and ultimately to the learnable `self.delta`. 
+        #     #ASV model parameters are frozen becuase we use model.eval()
+        #     # (requires_grad=False) so only inputs receive gradients.
+        #     emb_orig_batch = self.asv.extract_embedding_from_mel_tensor(mel_orig_batch)
+        #     emb_prot_batch = self.asv.extract_embedding_from_mel_tensor(mel_prot_batch)
+
+        #     # Cosine similarities per sample
+        #     sims = F.cosine_similarity(emb_orig_batch, emb_prot_batch, dim=1)
+
+        #     attack_losses_tensor = sims
+
+        #     # Purification resistance on a random subset (20%)
+        #     mask = (torch.rand(B, device=self.device) < 0.2)
+        #     if mask.any():
+        #         try:
+        #             mel_purified = self.apply_purification_simulation(mel_prot_batch[mask])
+        #             # with torch.no_grad():
+        #             emb_purified = self.asv.extract_embedding_from_mel_tensor(mel_purified)
+        #             purif_sims = F.cosine_similarity(emb_orig_batch[mask], emb_purified, dim=1)
+        #             attack_losses_tensor = torch.cat([attack_losses_tensor, purif_sims * 0.5])
+        #         except Exception:
+        #             pass
+
+        #     if attack_losses_tensor.numel() == 0:
+        #         attack_loss = torch.tensor(0.5, device=self.device)
+        #     else:
+        #         # # Target: push similarity below a threshold (e.g., 0.3)
+        #         # target_similarity = 0.3
+        #         # margin = 0.1
+
+        #         # # Hinge loss: penalize similarities above target
+        #         # attack_loss = torch.clamp(sims - target_similarity + margin, min=0.0).mean()
+        #         attack_loss = attack_losses_tensor.mean()
+
+        # except Exception as e:
+        #     # Fall back to a neutral attack loss on failure
+        #     attack_loss = torch.tensor(0.5, device=self.device)
+        
+        # # Perceptual quality loss (STFT-based)
+        # mel_diff = mel_prot_batch - mel_orig_batch
+        # quality_loss = torch.mean(mel_diff ** 2)
+        
+        # # Sparsity regularization (use mean to keep scale consistent across sizes)
+        # reg_loss = torch.mean(torch.abs(self.delta))
+        
+        # return attack_loss, quality_loss, reg_loss
+        """Advanced multi-objective loss - STABLE VERSION"""
+
         try:
             B = mel_orig_batch.size(0)
 
-            # Compute embeddings WITHOUT torch.no_grad() so gradients from the
-            # attack loss can flow back to the mel inputs and ultimately to
-            # the learnable `self.delta`. ASV model parameters are frozen
-            # (requires_grad=False) so only inputs receive gradients.
+            # Extract embeddings (no torch.no_grad!)
             emb_orig_batch = self.asv.extract_embedding_from_mel_tensor(mel_orig_batch)
             emb_prot_batch = self.asv.extract_embedding_from_mel_tensor(mel_prot_batch)
 
-            # Cosine similarities per sample
-            sims = F.cosine_similarity(emb_orig_batch, emb_prot_batch, dim=1)
+            # Use L2 distance instead of cosine similarity
+            # L2 distance has better gradients for normalized embeddings
+            emb_diff = emb_prot_batch - emb_orig_batch
+            l2_distances = torch.norm(emb_diff, dim=1)  # Shape: [B]
+            
+            # Attack loss: we want HIGH distance (good protection)
+            # But we MINIMIZE loss, so negate it
+            # Add small constant to prevent division by zero
+            attack_loss = -l2_distances.mean() + 1.0  # Shift to keep positive
+            
+            # Alternative: Use squared L2 for stronger gradients
+            # attack_loss = -torch.mean(l2_distances ** 2) + 2.0
 
-            attack_losses_tensor = sims
+            # Purification resistance (simplified - removed for stability)
+            # mask = (torch.rand(B, device=self.device) < 0.1)  # Reduce to 10%
+            # if mask.any():
+            #     try:
+            #         mel_purified = self.apply_purification_simulation(mel_prot_batch[mask])
+            #         emb_purified = self.asv.extract_embedding_from_mel_tensor(mel_purified)
+            #         purif_diff = emb_purified - emb_orig_batch[mask]
+            #         purif_distances = torch.norm(purif_diff, dim=1)
+            #         attack_loss = attack_loss * 0.8 + (-purif_distances.mean() + 1.0) * 0.2
+            #     except Exception:
+            #         pass
 
-            # Purification resistance on a random subset (20%)
-            mask = (torch.rand(B, device=self.device) < 0.2)
-            if mask.any():
-                try:
-                    mel_purified = self.apply_purification_simulation(mel_prot_batch[mask])
-                    with torch.no_grad():
-                        emb_purified = self.asv.extract_embedding_from_mel_tensor(mel_purified)
-                    purif_sims = F.cosine_similarity(emb_orig_batch[mask], emb_purified, dim=1)
-                    attack_losses_tensor = torch.cat([attack_losses_tensor, purif_sims * 0.5])
-                except Exception:
-                    pass
-
-            if attack_losses_tensor.numel() == 0:
-                attack_loss = torch.tensor(0.5, device=self.device)
-            else:
-                attack_loss = attack_losses_tensor.mean()
+            # Debug output (occasional)
+            if torch.rand(1).item() < 0.01:
+                cos_sim = F.cosine_similarity(emb_orig_batch, emb_prot_batch, dim=1).mean()
+                print(f"\n[DEBUG] Embedding L2 dist: {l2_distances.mean():.6f}, Cosine sim: {cos_sim:.4f}")
 
         except Exception as e:
-            # Fall back to a neutral attack loss on failure
-            attack_loss = torch.tensor(0.5, device=self.device)
+            print(f"[ERROR] Attack loss failed: {e}")
+            attack_loss = torch.tensor(1.0, device=self.device, requires_grad=True)
         
-        # Perceptual quality loss (STFT-based)
+        # Quality loss - L2 on mel spectrograms
         mel_diff = mel_prot_batch - mel_orig_batch
         quality_loss = torch.mean(mel_diff ** 2)
         
-        # Sparsity regularization (use mean to keep scale consistent across sizes)
+        # Regularization - L1 on delta (encourage sparsity)
         reg_loss = torch.mean(torch.abs(self.delta))
         
         return attack_loss, quality_loss, reg_loss
@@ -667,8 +728,7 @@ class RobustUniversalDeltaTrainer:
                         continue
                     
                     mel = self.audio_proc.wav_to_mel(wav)
-                    # Ensure mel is a numpy array for padding. If wav_to_mel
-                    # returned a torch.Tensor (vocoder mel), convert to numpy.
+                    # mel must be in np format
                     if isinstance(mel, torch.Tensor):
                         mel_np = mel.detach().cpu().numpy()
                     else:
@@ -695,7 +755,7 @@ class RobustUniversalDeltaTrainer:
             mel_batch_tensor = torch.from_numpy(np.stack(mel_padded)).float().to(self.device)
             
             # Apply perturbation with augmentation
-            mel_protected = self.apply_delta(mel_batch_tensor, use_augmentation=True)
+            mel_protected = self.apply_delta(mel_batch_tensor, use_augmentation=False)
             
             # Compute losses
             attack_loss, quality_loss, reg_loss = self.compute_losses(
@@ -715,16 +775,27 @@ class RobustUniversalDeltaTrainer:
             # Backward pass
             self.optimizer.zero_grad()
             total_loss.backward()
+
+            # 🔍 DEBUG: Check if delta is receiving gradients
+            if self.delta.grad is not None:
+                grad_norm = self.delta.grad.norm().item()
+                if batch_idx % 1000 == 0:  # Log every 1000 batches
+                    print(f"\n[DEBUG] Delta gradient norm: {grad_norm:.6f}")
+                if grad_norm < 1e-8:
+                    print(f"[WARNING] Very small gradients at batch {batch_idx}")
+            else:
+                print(f"[ERROR] No gradients flowing to delta at batch {batch_idx}!")
+                
             #torch.nn.utils.clip_grad_norm_([self.delta], max_norm=1.0)
             self.optimizer.step()
             
             # Project to epsilon ball
-            with torch.no_grad():
-                self.delta.data = torch.clamp(
-                    self.delta.data,
-                    -self.config['epsilon'],
-                    self.config['epsilon']
-                )
+            # with torch.no_grad():
+            #     self.delta.data = torch.clamp(
+            #         self.delta.data,
+            #         -self.config['epsilon'],
+            #         self.config['epsilon']
+            #     )
             
             # Record metrics
             epoch_metrics['attack_loss'].append(attack_loss.item())
@@ -786,7 +857,7 @@ class RobustUniversalDeltaTrainer:
             checkpoint_path = f"checkpoints_advanced/universal_delta_epoch{epoch}.npy"
             np.save(checkpoint_path, self.delta.detach().cpu().numpy())
             print(f"  ✅ Saved: {checkpoint_path}")
-            self.config['epsilon'] += 0.05
+            self.config['epsilon'] += 0.005
             if metrics.get('attack_loss', float('inf')) < best_attack_loss:
                 best_attack_loss = metrics['attack_loss']
                 np.save("checkpoints_advanced/universal_delta_best.npy", 
@@ -799,10 +870,50 @@ class RobustUniversalDeltaTrainer:
         print(f"Best attack loss: {best_attack_loss:.4f}")
         print(f"Checkpoints saved in: checkpoints_advanced/")
 
+    # Add this test function to your trainer class:
+    def test_gradient_flow(self):
+        """Test if gradients flow from embeddings back to delta"""
+        print("\n[TEST] Checking gradient flow...")
+        
+        # Create dummy mel
+        mel = torch.randn(2, 80, 100, device=self.device)
+        
+        # Apply delta
+        mel_prot = self.apply_delta(mel, use_augmentation=False)
+        
+        # Get embeddings
+        emb_orig = self.asv.extract_embedding_from_mel_tensor(mel)
+        emb_prot = self.asv.extract_embedding_from_mel_tensor(mel_prot)
+        
+        # Compute loss
+        diff = emb_prot - emb_orig
+        loss = -torch.norm(diff, dim=1).mean()
+        
+        # Backward
+        loss.backward()
+        
+        # Check gradient
+        if self.delta.grad is not None:
+            grad_norm = self.delta.grad.norm().item()
+            print(f"  Delta gradient norm: {grad_norm:.6f}")
+            print(f"  Loss value: {loss.item():.6f}")
+            print(f"  Embedding L2 diff: {torch.norm(diff, dim=1).mean():.6f}")
+            
+            if grad_norm < 1e-6:
+                print("  ❌ PROBLEM: Gradients too small!")
+            else:
+                print("  ✅ Gradients flowing")
+        else:
+            print("  ❌ PROBLEM: No gradients!")
+        
+        self.delta.grad = None  # Reset
 
-# ================================
-# ADVANCED PROTECTOR
-# ================================
+    # Call this before training:
+    # trainer.test_gradient_flow()
+
+
+# PROTECTION CLASS
+
 
 class AdvancedAudioProtector:
     """Apply advanced protection to audio"""
@@ -831,7 +942,6 @@ class AdvancedAudioProtector:
         wav, sr = self.audio_proc.load_audio(input_path)
         print(f"  Duration: {len(wav)/sr:.2f}s")
         
-        # If diagnostic scale == 0.0, skip processing and return original audio
         if float(scale) == 0.0:
             print("[DEBUG] scale==0.0: writing original audio without protection (diagnostic)")
             self.audio_proc.save_audio(output_path, wav)
@@ -957,7 +1067,6 @@ class AdvancedAudioProtector:
                         fig.savefig(img_path)
                         plt.close(fig)
 
-                        # Clean up mel debug artifacts to avoid cluttering workspace
                         try:
                             candidates = [base + '_mel_orig.npy', base + '_mel_prot.npy', base + '_mel_diff.npy']
                             for p in candidates:
@@ -1142,9 +1251,11 @@ class AdvancedAudioProtector:
         print(f"  Perceptual Loss: {perceptual_loss:.6f}")
 
 
-# ================================
-# ADVANCED EVALUATOR
-# ================================
+
+
+# EVALUATION CLASS
+from pystoi import stoi
+from torch_pesq import PesqLoss as pesq
 
 class AdvancedProtectionEvaluator:
     """Comprehensive evaluation"""
@@ -1192,9 +1303,19 @@ class AdvancedProtectionEvaluator:
         
         # 2. Audio Quality
         print("\n🎵 Audio Quality Metrics:")
+
+        # SNR
         snr = self.audio_proc.compute_snr(wav_orig, wav_prot)
+
+        # Perceptual Loss
         perceptual_loss = self.audio_proc.compute_perceptual_loss(wav_orig, wav_prot)
-        
+        # PESQ (narrowband)
+        # fs = int(self.config['sr'])   # ensure it is a Python int
+        # pesq_fn = pesq(fs, 'nb')      # narrowband or 'wb'
+        # pesq_score = pesq_fn(wav_orig, wav_prot)
+
+        # STOI
+        stoi_score = stoi(wav_orig, wav_prot, self.config['sr'], extended=False)
         print(f"  SNR: {snr:.2f} dB")
         if snr > 35:
             print("    → Imperceptible difference")
@@ -1204,7 +1325,8 @@ class AdvancedProtectionEvaluator:
             print("    → Noticeable differences")
         
         print(f"  Perceptual Loss: {perceptual_loss:.6f}")
-        
+        # print(f"  PESQ: {pesq_score:.4f}  (higher = better)")
+        print(f"  STOI: {stoi_score:.4f}  (higher = better speech intelligibility)")
         # 3. Purification Resistance Test
         print("\n🛡️  Purification Resistance:")
         self._test_purification_resistance(wav_orig, wav_prot)
@@ -1251,9 +1373,10 @@ class AdvancedProtectionEvaluator:
             print("  ❌ Vulnerable to purification")
 
 
-# ================================
-# MAIN CLI
-# ================================
+
+
+# MAIN LOOP
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1265,9 +1388,9 @@ def main():
     train_parser = subparsers.add_parser('train', help='Train protection model')
     train_parser.add_argument('--manifest', required=True, help='Path to training manifest')
     train_parser.add_argument('--epochs', type=int, default=30, help='Number of epochs')
-    train_parser.add_argument('--batch-size', type=int, default=4, help='Batch size')
-    train_parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
-    train_parser.add_argument('--epsilon', type=float, default=0.1, help='Perturbation budget')
+    train_parser.add_argument('--batch-size', type=int, default=16, help='Batch size')
+    train_parser.add_argument('--lr', type=float, default=1.0, help='Learning rate')
+    train_parser.add_argument('--epsilon', type=float, default=2.0, help='Perturbation budget')
     
     # Protect command
     protect_parser = subparsers.add_parser('protect', help='Protect audio file')
@@ -1287,7 +1410,7 @@ def main():
     
     # Configuration
     config = {
-        'sr': 16000,
+        'sr': 24000,
         'n_fft': 1024,
         'hop_length': 256,
         'n_mels': 80,
@@ -1301,9 +1424,9 @@ def main():
             'batch_size': args.batch_size,
             'lr': args.lr,
             'epsilon': args.epsilon,
-            'lambda_attack': 10.0,
-            'lambda_quality': 5.0,  # Higher weight for quality
-            'lambda_reg': 0.05       # Lower reg for more flexibility
+            'lambda_attack': 1.0,
+            'lambda_quality': 0.1,  # Higher weight for quality
+            'lambda_reg': 0.001       # Lower reg for more flexibility
         })
         
         print("\n" + "="*70)
@@ -1318,6 +1441,7 @@ def main():
         print("="*70 + "\n")
         
         trainer = RobustUniversalDeltaTrainer(config)
+        trainer.test_gradient_flow()  # Test gradient flow before training
         trainer.train(args.manifest)
     
     elif args.command == 'protect':

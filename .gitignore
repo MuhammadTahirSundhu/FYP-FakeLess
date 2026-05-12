@@ -2,6 +2,7 @@ data
 RawData
 __pycache__
 checkpoints_phase1
+*.wav
 # gitignore for flutter app
 ### https://raw.github.com/github/gitignore/80a8803b004013d17291196825a327b9e871f009/Android.gitignore
 

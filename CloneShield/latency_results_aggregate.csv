@@ -1,0 +1,3 @@
+Model,Category,Runs OK,Avg Latency (ms),Min Latency (ms),Max Latency (ms),P50 Latency (ms),StdDev (ms),Avg TTFB (ms)
+Protection Model (/protect),Warm Server,5/5,91532.17,88392.05,96044.88,91956.8,3197.26,91002.03
+Cloner Model (/clone),Warm Server,5/5,25535.1,22295.37,28938.08,24676.0,2722.62,25360.3
